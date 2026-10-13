@@ -16,11 +16,13 @@ export function DashboardTopbar({
   title,
   role,
   name,
+  menuOpen,
   onMenu,
 }: {
   title: string;
   role: AppRole;
   name: string;
+  menuOpen: boolean;
   onMenu: () => void;
 }) {
   const [open, setOpen] = useState<"alerts" | "help" | "account" | null>(null);
@@ -81,7 +83,13 @@ export function DashboardTopbar({
   return (
     <header className="dashboard-topbar">
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <button type="button" className="menu-toggle" aria-label="Open navigation" onClick={onMenu}>
+        <button
+          type="button"
+          className="menu-toggle"
+          aria-label={menuOpen ? "Collapse navigation" : "Expand navigation"}
+          aria-expanded={menuOpen}
+          onClick={onMenu}
+        >
           <Menu size={18} />
         </button>
         <h1 className="page-title" style={{ fontSize: "1.15rem" }}>
@@ -166,7 +174,10 @@ export function DashboardTopbar({
                 {role === "admin" ? "Workers" : "My work"}
               </Link>
               <SignOutButton redirectUrl="/">
-                <button type="button">
+                <button
+                  type="button"
+                  onClick={() => sessionStorage.setItem("chae-signing-out", "1")}
+                >
                   <LogOut size={16} />
                   Sign out
                 </button>

@@ -42,6 +42,7 @@ export function AppSidebar({
                   key={item.href}
                   href={item.href}
                   className={active ? "sidebar-link sidebar-link-active" : "sidebar-link"}
+                  aria-label={item.label}
                   aria-current={active ? "page" : undefined}
                   onClick={onNavigate}
                 >

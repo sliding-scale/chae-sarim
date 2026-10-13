@@ -44,7 +44,8 @@ export function DashboardShell({
             title={titleFor(pathname, role)}
             role={role}
             name={name}
-            onMenu={() => setOpen(true)}
+            menuOpen={open}
+            onMenu={() => setOpen((value) => !value)}
           />
           <div className="dashboard-content">{children}</div>
         </div>

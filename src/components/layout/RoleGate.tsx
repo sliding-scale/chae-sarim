@@ -6,7 +6,7 @@ import { api } from "../../../convex/_generated/api";
 import { homeFor, type AppRole } from "@/lib/navigation";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, useRef } from "react";
 
 export type Workspace = {
   name: string;
@@ -35,6 +35,12 @@ export function RoleGate({
   const router = useRouter();
   const { isLoading, isAuthenticated } = useConvexAuth();
   const current = useQuery(api.users.queries.getCurrentUser);
+  const wasAuthenticated = useRef(false);
+  if (isAuthenticated) wasAuthenticated.current = true;
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) sessionStorage.removeItem("chae-signing-out");
+  }, [isAuthenticated, isLoading]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -61,8 +67,13 @@ export function RoleGate({
         tenantName: null,
       };
 
-  let statusTitle = "Opening your dashboard";
-  let statusBody = "Checking your session.";
+  const signingOut =
+    wasAuthenticated.current &&
+    (isLoading || !isAuthenticated) &&
+    typeof window !== "undefined" &&
+    sessionStorage.getItem("chae-signing-out") === "1";
+  let statusTitle = signingOut ? "Signing out" : "Opening your dashboard";
+  let statusBody = signingOut ? "Closing your session." : "Checking your session.";
   if (!isLoading && isAuthenticated && current && !current.role) {
     statusTitle = "Creating your dashboard";
     statusBody = "Your account is signed in. Your company membership is still being created.";

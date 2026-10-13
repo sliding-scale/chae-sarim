@@ -47,7 +47,11 @@ export function MarketingNavbar() {
           )}
           {isLoaded && isSignedIn ? (
             <SignOutButton redirectUrl="/">
-              <button type="button" className="btn-text">
+              <button
+                type="button"
+                className="btn-text"
+                onClick={() => sessionStorage.setItem("chae-signing-out", "1")}
+              >
                 Sign out
               </button>
             </SignOutButton>
