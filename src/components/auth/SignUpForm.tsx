@@ -18,6 +18,7 @@ export function SignUpForm() {
   const [code, setCode] = useState("");
   const [verify, setVerify] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const busy = fetchStatus === "fetching";
 
@@ -44,6 +45,7 @@ export function SignUpForm() {
     if (confirm !== password) next.confirm = "Passwords do not match.";
     setFieldErrors(next);
     setLocalError(null);
+    setNotice(null);
     if (Object.keys(next).length) return;
 
     const [firstName, ...rest] = name.trim().split(/\s+/);
@@ -81,12 +83,25 @@ export function SignUpForm() {
     }
     setFieldErrors({});
     setLocalError(null);
+    setNotice(null);
     const result = await signUp.verifications.verifyEmailCode({ code });
     if (result.error) {
       setFieldErrors({ code: result.error.longMessage || result.error.message });
       return;
     }
     await finish();
+  }
+
+  // Sends another email verification code.
+  async function onResend() {
+    setLocalError(null);
+    setNotice(null);
+    const sent = await signUp.verifications.sendEmailCode();
+    if (sent.error) {
+      setLocalError(sent.error.longMessage || sent.error.message);
+      return;
+    }
+    setNotice("A new code was sent to your email.");
   }
 
   // Starts Google sign-up.
@@ -117,7 +132,13 @@ export function SignUpForm() {
             value={code}
             error={fieldErrors.code}
             onChange={(event) => setCode(event.target.value)}
+            action={
+              <button type="button" className="link-button" onClick={onResend} disabled={busy}>
+                Send again
+              </button>
+            }
           />
+          {notice ? <p className="auth-note">{notice}</p> : null}
           <button className="btn-primary btn-block" type="submit" disabled={busy}>
             {busy ? <span className="spinner" aria-hidden="true" /> : null}
             {busy ? "Creating account..." : "Verify email"}

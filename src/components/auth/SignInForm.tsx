@@ -34,6 +34,7 @@ export function SignInForm() {
   const [code, setCode] = useState("");
   const [nextPassword, setNextPassword] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; code?: string }>({});
   const busy = fetchStatus === "fetching";
 
@@ -112,6 +113,7 @@ export function SignInForm() {
     }
     setFieldErrors({});
     setLocalError(null);
+    setNotice(null);
     const created = await signIn.create({ identifier: email });
     if (created.error) {
       setLocalError(created.error.longMessage || created.error.message);
@@ -133,6 +135,7 @@ export function SignInForm() {
     if (nextPassword.length < 8) next.password = "Use at least 8 characters.";
     setFieldErrors(next);
     setLocalError(null);
+    setNotice(null);
     if (Object.keys(next).length) return;
 
     const verified = await signIn.resetPasswordEmailCode.verifyCode({ code });
@@ -148,6 +151,18 @@ export function SignInForm() {
     await finish();
   }
 
+  // Sends another password reset code to the same email.
+  async function onResendReset() {
+    setLocalError(null);
+    setNotice(null);
+    const sent = await signIn.resetPasswordEmailCode.sendCode();
+    if (sent.error) {
+      setLocalError(sent.error.longMessage || sent.error.message);
+      return;
+    }
+    setNotice("A new code was sent to your email.");
+  }
+
   // Checks the second-factor code and finishes sign-in.
   async function onMfa(event: React.FormEvent) {
     event.preventDefault();
@@ -157,6 +172,7 @@ export function SignInForm() {
     }
     setFieldErrors({});
     setLocalError(null);
+    setNotice(null);
     const strategy = signIn.supportedSecondFactors[0]?.strategy;
     const result =
       strategy === "totp"
@@ -171,6 +187,19 @@ export function SignInForm() {
       return;
     }
     await finish();
+  }
+
+  // Sends another second-factor code by email or phone.
+  async function onResendMfa() {
+    setLocalError(null);
+    setNotice(null);
+    const strategy = signIn.supportedSecondFactors[0]?.strategy;
+    const sent = strategy === "phone_code" ? await signIn.mfa.sendPhoneCode() : await signIn.mfa.sendEmailCode();
+    if (sent.error) {
+      setLocalError(sent.error.longMessage || sent.error.message);
+      return;
+    }
+    setNotice(strategy === "phone_code" ? "A new code was sent to your phone." : "A new code was sent to your email.");
   }
 
   const alert =
@@ -249,7 +278,13 @@ export function SignInForm() {
             value={code}
             error={fieldErrors.code}
             onChange={(event) => setCode(event.target.value)}
+            action={
+              <button type="button" className="link-button" onClick={onResendReset} disabled={busy}>
+                Send again
+              </button>
+            }
           />
+          {notice ? <p className="auth-note">{notice}</p> : null}
           <AuthInput
             id="new-password"
             label="New password"
@@ -276,7 +311,16 @@ export function SignInForm() {
             value={code}
             error={fieldErrors.code}
             onChange={(event) => setCode(event.target.value)}
+            action={
+              signIn.supportedSecondFactors[0]?.strategy === "totp" ||
+              signIn.supportedSecondFactors[0]?.strategy === "backup_code" ? undefined : (
+                <button type="button" className="link-button" onClick={onResendMfa} disabled={busy}>
+                  Send again
+                </button>
+              )
+            }
           />
+          {notice ? <p className="auth-note">{notice}</p> : null}
           <button className="btn-primary btn-block" type="submit" disabled={busy}>
             {busy ? "Signing in..." : "Continue"}
           </button>
