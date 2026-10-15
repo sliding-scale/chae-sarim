@@ -3,15 +3,19 @@
 import { Logo } from "@/components/brand/Logo";
 import { api } from "../../../convex/_generated/api";
 import { homeFor } from "@/lib/navigation";
-import { useConvexAuth, useQuery } from "convex/react";
+import { useAuth } from "@clerk/nextjs";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 // Sends a signed-in person to the admin or worker dashboard for their membership role.
 export function DashboardRedirect() {
   const router = useRouter();
+  const { isLoaded, isSignedIn } = useAuth();
   const { isLoading, isAuthenticated } = useConvexAuth();
   const current = useQuery(api.users.queries.getCurrentUser);
+  const ensureWorkspace = useMutation(api.users.mutations.ensureWorkspace);
+  const ensuring = useRef(false);
   const wasAuthenticated = useRef(false);
   if (isAuthenticated) wasAuthenticated.current = true;
 
@@ -20,13 +24,18 @@ export function DashboardRedirect() {
   }, [isAuthenticated, isLoading]);
 
   useEffect(() => {
-    if (isLoading) return;
-    if (!isAuthenticated) {
+    if (!isLoaded || isLoading) return;
+    if (!isSignedIn) {
       router.replace("/sign-in");
       return;
     }
-    if (current?.role) router.replace(homeFor(current.role));
-  }, [current, isAuthenticated, isLoading, router]);
+    if (isAuthenticated && current?.role) router.replace(homeFor(current.role));
+    if (!isAuthenticated || !current || current.role || ensuring.current) return;
+    ensuring.current = true;
+    void ensureWorkspace().finally(() => {
+      ensuring.current = false;
+    });
+  }, [current, ensureWorkspace, isAuthenticated, isLoaded, isLoading, isSignedIn, router]);
 
   const waiting = !current?.role;
   const signingOut =

@@ -4,15 +4,20 @@ import { AuthCard } from "@/components/auth/AuthCard";
 import { GoogleLogo } from "@/components/auth/GoogleLogo";
 import { AuthError } from "@/components/auth/AuthError";
 import { AuthInput } from "@/components/auth/AuthInput";
-import { useSignIn } from "@clerk/nextjs";
+import { useAuth, useSignIn } from "@clerk/nextjs";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Step = "credentials" | "reset" | "code" | "mfa";
 
+const GOOGLE_ONLY =
+  "This account uses Google. Continue with Google to sign in.";
+
 // Turns a Clerk sign-in error code into a short message.
 function friendly(code: string | undefined, fallback: string) {
+  if (code === "strategy_for_user_invalid" || code === "form_password_not_set") {
+    return GOOGLE_ONLY;
+  }
   if (code === "form_password_incorrect" || code === "form_identifier_not_found") {
     return "Invalid email or password.";
   }
@@ -21,7 +26,7 @@ function friendly(code: string | undefined, fallback: string) {
 
 // Signs an existing person in with a password, Google, or a reset code.
 export function SignInForm() {
-  const router = useRouter();
+  const { isLoaded, isSignedIn } = useAuth();
   const { signIn, errors, fetchStatus } = useSignIn();
   const [step, setStep] = useState<Step>("credentials");
   const [email, setEmail] = useState("");
@@ -32,15 +37,15 @@ export function SignInForm() {
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; code?: string }>({});
   const busy = fetchStatus === "fetching";
 
+  // Opens the dashboard when this browser already has a Clerk session.
+  useEffect(() => {
+    if (isLoaded && isSignedIn) window.location.assign("/dashboard");
+  }, [isLoaded, isSignedIn]);
+
   // Sends the browser to the dashboard after Clerk finishes sign-in.
   function goDashboard() {
     return ({ decorateUrl }: { decorateUrl: (url: string) => string }) => {
-      const destination = decorateUrl("/dashboard");
-      if (destination.startsWith("http")) {
-        window.location.href = destination;
-        return;
-      }
-      router.push(destination);
+      window.location.assign(decorateUrl("/dashboard"));
     };
   }
 
@@ -65,7 +70,21 @@ export function SignInForm() {
     setLocalError(null);
     if (Object.keys(next).length) return;
 
-    const result = await signIn.password({ emailAddress: email, password });
+    const created = await signIn.create({ identifier: email });
+    if (created.error) {
+      if (created.error.code === "session_exists" || created.error.code === "identifier_already_signed_in") {
+        window.location.assign("/dashboard");
+        return;
+      }
+      setLocalError(friendly(created.error.code, created.error.longMessage || created.error.message));
+      return;
+    }
+    const strategies = (signIn.supportedFirstFactors ?? []).map((factor) => factor.strategy);
+    if (strategies.includes("oauth_google") && !strategies.includes("password")) {
+      setLocalError(GOOGLE_ONLY);
+      return;
+    }
+    const result = await signIn.password({ password });
     if (result.error) {
       setLocalError(friendly(result.error.code, result.error.longMessage || result.error.message));
       return;
@@ -173,7 +192,7 @@ export function SignInForm() {
             autoComplete="email"
             placeholder="you@company.com"
             value={email}
-            error={fieldErrors.email || errors.fields?.identifier?.longMessage}
+            error={fieldErrors.email}
             onChange={(event) => setEmail(event.target.value)}
           />
           <AuthInput
@@ -183,7 +202,7 @@ export function SignInForm() {
             autoComplete="current-password"
             placeholder="Enter your password"
             value={password}
-            error={fieldErrors.password || errors.fields?.password?.longMessage}
+            error={fieldErrors.password}
             onChange={(event) => setPassword(event.target.value)}
             action={
               <button type="button" className="link-button" onClick={() => setStep("reset")}>
@@ -255,7 +274,7 @@ export function SignInForm() {
             autoComplete="one-time-code"
             placeholder="Enter your code"
             value={code}
-            error={fieldErrors.code || errors.fields?.code?.longMessage}
+            error={fieldErrors.code}
             onChange={(event) => setCode(event.target.value)}
           />
           <button className="btn-primary btn-block" type="submit" disabled={busy}>

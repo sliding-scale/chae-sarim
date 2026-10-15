@@ -15,6 +15,77 @@ export function normalizeEmail(email: string) {
   return normalized;
 }
 
+// Creates the Convex user for a Clerk account, then matches an invite or opens a company.
+export async function syncClerkUser(
+  ctx: MutationCtx,
+  args: { clerkId: string; email: string; name: string },
+) {
+  const email = args.email.trim().toLowerCase();
+  const existing = await ctx.db
+    .query("users")
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+    .unique();
+
+  if (existing) {
+    await ctx.db.patch(existing._id, { email, name: args.name });
+  } else {
+    await ctx.db.insert("users", {
+      clerkId: args.clerkId,
+      email,
+      name: args.name,
+    });
+  }
+
+  const membership = await ctx.db
+    .query("memberships")
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+    .unique();
+  if (membership) return;
+
+  const invite = email
+    ? await ctx.db
+        .query("invites")
+        .withIndex("by_email", (q) => q.eq("email", email))
+        .unique()
+    : null;
+  if (invite) {
+    await ctx.db.insert("memberships", {
+      clerkId: args.clerkId,
+      tenantId: invite.tenantId,
+      role: "worker",
+    });
+    await ctx.db.delete(invite._id);
+    return;
+  }
+
+  const tenantId = await ctx.db.insert("tenants", {
+    name: `${args.name}'s company`,
+  });
+  await ctx.db.insert("memberships", {
+    clerkId: args.clerkId,
+    tenantId,
+    role: "admin",
+  });
+}
+
+// Saves the signed-in person's display name on their Convex user.
+export async function renameSignedInUser(ctx: MutationCtx, name: string) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new ConvexError("You need to sign in.");
+
+  const trimmed = name.trim().replace(/\s+/g, " ");
+  if (!trimmed) throw new ConvexError("Enter your name.");
+  if (trimmed.length > 80) throw new ConvexError("Name must be 80 characters or fewer.");
+
+  const existing = await ctx.db
+    .query("users")
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+    .unique();
+  if (!existing) throw new ConvexError("Your account is still being created.");
+
+  await ctx.db.patch(existing._id, { name: trimmed });
+}
+
 // Returns the signed-in admin's membership, or rejects the call.
 export async function requireAdmin(
   ctx: QueryCtx | MutationCtx,

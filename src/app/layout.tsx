@@ -2,6 +2,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { shadcn } from "@/components/ui/clerk-theme";
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { ThemeSync } from "@/components/theme/ThemeSync";
 import { ConvexClientProvider } from "@/components/ui/ConvexClientProvider";
 import "./globals.css";
 
@@ -18,8 +19,17 @@ function ShellFallback() {
 // Wraps every page with the shared document, fonts, and Convex client.
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className="h-full" data-scroll-behavior="smooth">
+    <html lang="en" className="h-full" data-scroll-behavior="smooth" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('chae-theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t;}catch(e){}",
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
+        <ThemeSync />
         <ClerkProvider appearance={{ theme: shadcn }}>
           <Suspense fallback={<ShellFallback />}>
             <ConvexClientProvider>{children}</ConvexClientProvider>

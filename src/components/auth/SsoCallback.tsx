@@ -12,12 +12,7 @@ export function SsoCallback() {
       <section className="auth-card" style={{ textAlign: "center" }}>
         <HandleSSOCallback
           navigateToApp={({ decorateUrl }) => {
-            const destination = decorateUrl("/dashboard");
-            if (destination.startsWith("http")) {
-              window.location.href = destination;
-              return;
-            }
-            router.push(destination);
+            window.location.assign(decorateUrl("/dashboard"));
           }}
           navigateToSignIn={() => router.push("/sign-in")}
           navigateToSignUp={() => router.push("/sign-up")}

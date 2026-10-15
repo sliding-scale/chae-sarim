@@ -1,54 +1,36 @@
 import { v } from "convex/values";
-import { internalMutation } from "../_generated/server";
+import { renameSignedInUser, syncClerkUser } from "../lib";
+import { internalMutation, mutation } from "../_generated/server";
 
 // Creates or updates a user from a verified Clerk webhook, then matches an invite or opens a new company.
 export const createOrUpdateFromClerk = internalMutation({
   args: { clerkId: v.string(), email: v.string(), name: v.string() },
   handler: async (ctx, args) => {
-    const email = args.email.trim().toLowerCase();
-    const existing = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .unique();
+    await syncClerkUser(ctx, args);
+  },
+});
 
-    if (existing) {
-      await ctx.db.patch(existing._id, { email, name: args.name });
-    } else {
-      await ctx.db.insert("users", {
-        clerkId: args.clerkId,
-        email,
-        name: args.name,
-      });
-    }
-
-    const membership = await ctx.db
-      .query("memberships")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .unique();
-    if (membership) return;
-
-    const invite = await ctx.db
-      .query("invites")
-      .withIndex("by_email", (q) => q.eq("email", email))
-      .unique();
-    if (invite) {
-      await ctx.db.insert("memberships", {
-        clerkId: args.clerkId,
-        tenantId: invite.tenantId,
-        role: "worker",
-      });
-      await ctx.db.delete(invite._id);
-      return;
-    }
-
-    const tenantId = await ctx.db.insert("tenants", {
-      name: `${args.name}'s company`,
+// Opens a company membership for the signed-in person when the webhook has not created one yet.
+export const ensureWorkspace = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+    await syncClerkUser(ctx, {
+      clerkId: identity.subject,
+      email: identity.email ?? "",
+      name: identity.name || "Member",
     });
-    await ctx.db.insert("memberships", {
-      clerkId: args.clerkId,
-      tenantId,
-      role: "admin",
-    });
+  },
+});
+
+// Stores the signed-in person's display name after they edit it on their profile.
+export const updateProfileName = mutation({
+  args: { name: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await renameSignedInUser(ctx, args.name);
+    return null;
   },
 });
 

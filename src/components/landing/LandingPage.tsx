@@ -64,9 +64,6 @@ export function LandingPage() {
               <AuthLink className="btn-primary btn-lg" href="/sign-up">
                 Get started
               </AuthLink>
-              <AuthLink className="btn-secondary btn-lg" href="/sign-in">
-                Sign in
-              </AuthLink>
             </div>
             <div className="hero-dashboard-preview" aria-hidden="true">
               <div className="preview-frame">

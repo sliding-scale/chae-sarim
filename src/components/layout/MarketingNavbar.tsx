@@ -2,10 +2,11 @@
 
 import { AuthLink } from "@/components/auth/AuthLink";
 import { Logo } from "@/components/brand/Logo";
-import { SignOutButton, useAuth } from "@clerk/nextjs";
-import { Menu, X } from "lucide-react";
+import { UserAvatar } from "@/components/users/UserAvatar";
+import { SignOutButton, useAuth, useUser } from "@clerk/nextjs";
+import { LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const links = [
   { href: "/#product", label: "Product" },
@@ -17,7 +18,28 @@ const links = [
 // Renders the public site navigation.
 export function MarketingNavbar() {
   const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
   const [open, setOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
+  const name = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Account";
+
+  useEffect(() => {
+    // Closes the account menu when the pointer lands outside it.
+    function onPointer(event: MouseEvent) {
+      if (!accountRef.current?.contains(event.target as Node)) setAccountOpen(false);
+    }
+    // Closes the account menu when Escape is pressed.
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setAccountOpen(false);
+    }
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
 
   return (
     <header className="landing-header">
@@ -32,9 +54,34 @@ export function MarketingNavbar() {
         </nav>
         <div className="nav-actions">
           {isLoaded && isSignedIn ? (
-            <Link className="btn-primary" href="/dashboard">
-              Open dashboard
-            </Link>
+            <div className="menu" ref={accountRef}>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Account menu"
+                aria-expanded={accountOpen}
+                onClick={() => setAccountOpen((value) => !value)}
+              >
+                <UserAvatar name={name} imageUrl={user?.hasImage ? user.imageUrl : null} />
+              </button>
+              {accountOpen ? (
+                <div className="menu-panel" role="menu">
+                  <Link href="/dashboard" onClick={() => setAccountOpen(false)}>
+                    <LayoutDashboard size={16} />
+                    Dashboard
+                  </Link>
+                  <SignOutButton redirectUrl="/">
+                    <button
+                      type="button"
+                      onClick={() => sessionStorage.setItem("chae-signing-out", "1")}
+                    >
+                      <LogOut size={16} />
+                      Sign out
+                    </button>
+                  </SignOutButton>
+                </div>
+              ) : null}
+            </div>
           ) : (
             <>
               <AuthLink className="btn-text" href="/sign-in">
@@ -45,17 +92,6 @@ export function MarketingNavbar() {
               </AuthLink>
             </>
           )}
-          {isLoaded && isSignedIn ? (
-            <SignOutButton redirectUrl="/">
-              <button
-                type="button"
-                className="btn-text"
-                onClick={() => sessionStorage.setItem("chae-signing-out", "1")}
-              >
-                Sign out
-              </button>
-            </SignOutButton>
-          ) : null}
           <button
             type="button"
             className="nav-toggle"

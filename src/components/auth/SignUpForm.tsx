@@ -6,12 +6,10 @@ import { AuthError } from "@/components/auth/AuthError";
 import { AuthInput } from "@/components/auth/AuthInput";
 import { useSignUp } from "@clerk/nextjs";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 // Creates an account with a password or Google, then confirms the email when Clerk asks.
 export function SignUpForm() {
-  const router = useRouter();
   const { signUp, errors, fetchStatus } = useSignUp();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -26,12 +24,7 @@ export function SignUpForm() {
   // Sends the browser to the dashboard after Clerk finishes sign-up.
   function goDashboard() {
     return ({ decorateUrl }: { decorateUrl: (url: string) => string }) => {
-      const destination = decorateUrl("/dashboard");
-      if (destination.startsWith("http")) {
-        window.location.href = destination;
-        return;
-      }
-      router.push(destination);
+      window.location.assign(decorateUrl("/dashboard"));
     };
   }
 
@@ -122,7 +115,7 @@ export function SignUpForm() {
             autoComplete="one-time-code"
             placeholder="Enter the code"
             value={code}
-            error={fieldErrors.code || errors.fields?.code?.longMessage}
+            error={fieldErrors.code}
             onChange={(event) => setCode(event.target.value)}
           />
           <button className="btn-primary btn-block" type="submit" disabled={busy}>
@@ -138,7 +131,7 @@ export function SignUpForm() {
             autoComplete="name"
             placeholder="Sarah Khan"
             value={name}
-            error={fieldErrors.name || errors.fields?.firstName?.longMessage}
+            error={fieldErrors.name}
             onChange={(event) => setName(event.target.value)}
           />
           <AuthInput
@@ -148,7 +141,7 @@ export function SignUpForm() {
             autoComplete="email"
             placeholder="you@company.com"
             value={email}
-            error={fieldErrors.email || errors.fields?.emailAddress?.longMessage}
+            error={fieldErrors.email}
             onChange={(event) => setEmail(event.target.value)}
           />
           <AuthInput
@@ -158,7 +151,7 @@ export function SignUpForm() {
             autoComplete="new-password"
             placeholder="Create a password"
             value={password}
-            error={fieldErrors.password || errors.fields?.password?.longMessage}
+            error={fieldErrors.password}
             onChange={(event) => setPassword(event.target.value)}
           />
           <AuthInput

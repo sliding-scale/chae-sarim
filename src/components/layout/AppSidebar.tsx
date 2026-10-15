@@ -3,6 +3,7 @@
 import { Logo } from "@/components/brand/Logo";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { homeFor, navigationFor, type AppRole } from "@/lib/navigation";
+import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -20,6 +21,7 @@ export function AppSidebar({
   open: boolean;
   onNavigate: () => void;
 }) {
+  const { user } = useUser();
   const pathname = usePathname();
   const home = homeFor(role);
   const sections = navigationFor(role);
@@ -55,7 +57,7 @@ export function AppSidebar({
         ))}
       </nav>
       <div className="sidebar-footer">
-        <UserAvatar name={name} />
+        <UserAvatar name={name} imageUrl={user?.hasImage ? user.imageUrl : null} />
         <div className="sidebar-footer-copy">
           <strong>{name}</strong>
           <span>

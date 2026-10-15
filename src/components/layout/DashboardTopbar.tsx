@@ -5,7 +5,7 @@ import type { AppRole } from "@/lib/navigation";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
-import { SignOutButton } from "@clerk/nextjs";
+import { SignOutButton, useUser } from "@clerk/nextjs";
 import { Bell, HelpCircle, LogOut, Menu, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -25,6 +25,7 @@ export function DashboardTopbar({
   menuOpen: boolean;
   onMenu: () => void;
 }) {
+  const { user } = useUser();
   const [open, setOpen] = useState<"alerts" | "help" | "account" | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -159,19 +160,13 @@ export function DashboardTopbar({
             aria-expanded={open === "account"}
             onClick={() => setOpen(open === "account" ? null : "account")}
           >
-            <UserAvatar name={name} />
+            <UserAvatar name={name} imageUrl={user?.hasImage ? user.imageUrl : null} />
           </button>
           {open === "account" ? (
             <div className="menu-panel" role="menu">
-              <div className="user-chip" style={{ padding: "8px 10px 10px" }}>
-                <div>
-                  <strong>{name}</strong>
-                  <span>{role === "admin" ? "Administrator" : "Worker"}</span>
-                </div>
-              </div>
-              <Link href={role === "admin" ? "/dashboard/admin/workers" : "/dashboard/worker"} onClick={() => setOpen(null)}>
+              <Link href={role === "admin" ? "/dashboard/admin/profile" : "/dashboard/worker/profile"} onClick={() => setOpen(null)}>
                 <User size={16} />
-                {role === "admin" ? "Workers" : "My work"}
+                Profile
               </Link>
               <SignOutButton redirectUrl="/">
                 <button
@@ -196,8 +191,10 @@ export function titleFor(pathname: string, role: AppRole) {
     if (pathname.startsWith("/dashboard/worker/timesheets")) return "Timesheets";
     if (pathname.startsWith("/dashboard/worker/invoices")) return "Invoices";
     if (pathname.startsWith("/dashboard/worker/holidays")) return "Holidays";
+    if (pathname.startsWith("/dashboard/worker/profile")) return "Profile";
     return "Overview";
   }
+  if (pathname.startsWith("/dashboard/admin/profile")) return "Profile";
   if (pathname.startsWith("/dashboard/admin/workers")) return "Workers";
   if (pathname.startsWith("/dashboard/admin/job-sites")) return "Job sites";
   if (pathname.startsWith("/dashboard/admin/timesheets")) return "Timesheets";
