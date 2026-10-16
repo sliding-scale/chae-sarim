@@ -6,12 +6,17 @@ export default defineSchema({
     clerkId: v.string(),
     name: v.string(),
     email: v.string(),
+    imageStorageId: v.optional(v.id("_storage")),
   })
     .index("by_clerk_id", ["clerkId"])
     .index("by_email", ["email"]),
 
   tenants: defineTable({
     name: v.string(),
+    address: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
+    imageStorageId: v.optional(v.id("_storage")),
   }),
 
   memberships: defineTable({
@@ -26,9 +31,20 @@ export default defineSchema({
     tenantId: v.id("tenants"),
     email: v.string(),
     role: v.literal("worker"),
+    clerkId: v.optional(v.string()),
+    clerkInvitationId: v.optional(v.string()),
   })
     .index("by_email", ["email"])
     .index("by_tenant_id", ["tenantId"]),
+
+  jobSiteAssignments: defineTable({
+    tenantId: v.id("tenants"),
+    clerkId: v.string(),
+    jobSiteId: v.id("jobSites"),
+  })
+    .index("by_tenant_id_and_clerk_id", ["tenantId", "clerkId"])
+    .index("by_job_site_id", ["jobSiteId"])
+    .index("by_clerk_id_and_job_site_id", ["clerkId", "jobSiteId"]),
 
   jobSites: defineTable({
     tenantId: v.id("tenants"),
@@ -102,7 +118,7 @@ export default defineSchema({
   notifications: defineTable({
     tenantId: v.id("tenants"),
     recipientClerkId: v.string(),
-    kind: v.union(v.literal("timesheet"), v.literal("invoice"), v.literal("holiday")),
+    kind: v.union(v.literal("timesheet"), v.literal("invoice"), v.literal("holiday"), v.literal("member")),
     title: v.string(),
     body: v.string(),
     href: v.string(),

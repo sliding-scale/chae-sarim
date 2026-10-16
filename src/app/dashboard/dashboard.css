@@ -1,0 +1,108 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is([data-theme="dark"] *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+}
+
+.dashboard-app {
+  --background: #ffffff;
+  --foreground: #26352b;
+  --card: #ffffff;
+  --card-foreground: #26352b;
+  --popover: #ffffff;
+  --popover-foreground: #26352b;
+  --primary: #17723a;
+  --primary-foreground: #f6fbf7;
+  --secondary: #edf3ee;
+  --secondary-foreground: #26352b;
+  --muted: #edf3ee;
+  --muted-foreground: #78847b;
+  --accent: #e7f6eb;
+  --accent-foreground: #14502c;
+  --destructive: #d45d62;
+  --border: #e2e9e3;
+  --input: #e2e9e3;
+  --ring: #19b94b;
+  --sidebar: #f4f7f4;
+  --sidebar-foreground: #26352b;
+  --sidebar-primary: #17723a;
+  --sidebar-primary-foreground: #f6fbf7;
+  --sidebar-accent: #e4eee6;
+  --sidebar-accent-foreground: #14502c;
+  --sidebar-border: #e2e9e3;
+  --sidebar-ring: #19b94b;
+  --chart-1: #19b94b;
+  --chart-2: #17723a;
+  --chart-3: #6b9ed1;
+  --chart-4: #dca54b;
+  --chart-5: #d45d62;
+}
+
+html[data-theme="dark"] .dashboard-app {
+  --background: #1c2128;
+  --foreground: #f4f7f4;
+  --card: #242b33;
+  --card-foreground: #f4f7f4;
+  --popover: #242b33;
+  --popover-foreground: #f4f7f4;
+  --primary: #3dce73;
+  --primary-foreground: #102116;
+  --secondary: #2a313a;
+  --secondary-foreground: #f4f7f4;
+  --muted: #2a313a;
+  --muted-foreground: #b7c0b9;
+  --accent: #24302a;
+  --accent-foreground: #d7f5e1;
+  --destructive: #f0a0a3;
+  --border: #3a4250;
+  --input: #3a4250;
+  --ring: #8f9bab;
+  --sidebar: #14171c;
+  --sidebar-foreground: #f4f7f4;
+  --sidebar-primary: #3dce73;
+  --sidebar-primary-foreground: #102116;
+  --sidebar-accent: #24302a;
+  --sidebar-accent-foreground: #d7f5e1;
+  --sidebar-border: #3a4250;
+  --sidebar-ring: #8f9bab;
+  --chart-1: #3dce73;
+  --chart-2: #6b9ed1;
+  --chart-3: #dca54b;
+  --chart-4: #f0a0a3;
+  --chart-5: #c9d4cc;
+}

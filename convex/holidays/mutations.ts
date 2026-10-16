@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation } from "../_generated/server";
-import { holidayRange, holidayReason, notifyAdminsOfSubmission, notifyWorkerOfDecision, rejectionReason, requireAdmin, requireJobSite, requirePendingHoliday, requireWorker } from "../lib";
+import { holidayRange, holidayReason, notifyAdminsOfSubmission, notifyWorkerOfDecision, rejectionReason, requireAdmin, requireAssignedJobSite, requirePendingHoliday, requireWorker } from "../lib";
 
 // Stores a holiday request from the signed-in worker for one job site.
 export const submitHoliday = mutation({
@@ -13,7 +13,7 @@ export const submitHoliday = mutation({
   returns: v.id("holidayRequests"),
   handler: async (ctx, args) => {
     const worker = await requireWorker(ctx);
-    await requireJobSite(ctx, worker.tenantId, args.jobSiteId);
+    await requireAssignedJobSite(ctx, worker.tenantId, worker.clerkId, args.jobSiteId);
     const range = holidayRange(args.startDate, args.endDate);
     const holidayId = await ctx.db.insert("holidayRequests", {
       tenantId: worker.tenantId,

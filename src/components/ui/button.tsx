@@ -39,7 +39,6 @@ const buttonVariants = cva(
   }
 )
 
-// Renders a button with the shared size and variant styles.
 function Button({
   className,
   variant = "default",

@@ -5,7 +5,7 @@ import {
   invoiceMonth,
   requireAdmin,
   requireInvoiceFile,
-  requireJobSite,
+  requireAssignedJobSite,
   requirePendingInvoice,
   requireWorker,
   notifyAdminsOfSubmission,
@@ -41,7 +41,7 @@ export const submitInvoice = mutation({
   returns: v.id("workerInvoices"),
   handler: async (ctx, args) => {
     const worker = await requireWorker(ctx);
-    await requireJobSite(ctx, worker.tenantId, args.jobSiteId);
+    await requireAssignedJobSite(ctx, worker.tenantId, worker.clerkId, args.jobSiteId);
     const month = invoiceMonth(args.invoiceMonth);
     const amount = invoiceAmount(args.amount);
     if (args.files.length < 1 || args.files.length > invoiceFileLimit) {

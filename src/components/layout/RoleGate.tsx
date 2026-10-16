@@ -14,6 +14,8 @@ export type Workspace = {
   email: string;
   role: AppRole;
   tenantName: string | null;
+  tenantImageUrl: string | null;
+  imageUrl: string | null;
 };
 
 const WorkspaceContext = createContext<Workspace | null>(null);
@@ -71,12 +73,16 @@ export function RoleGate({
         email: session.email,
         role: allow,
         tenantName: session.tenantName,
+        tenantImageUrl: session.tenantImageUrl,
+        imageUrl: session.imageUrl,
       }
     : {
         name: "",
         email: "",
         role: allow,
         tenantName: null,
+        tenantImageUrl: null,
+        imageUrl: null,
       };
 
   const signingOut =
@@ -96,7 +102,13 @@ export function RoleGate({
   return (
     <WorkspaceContext.Provider value={workspace}>
       {session ? (
-        <DashboardShell role={workspace.role} name={workspace.name} tenantName={workspace.tenantName}>
+        <DashboardShell
+          role={workspace.role}
+          name={workspace.name}
+          tenantName={workspace.tenantName}
+          tenantImageUrl={workspace.tenantImageUrl}
+          imageUrl={workspace.imageUrl}
+        >
           {children}
         </DashboardShell>
       ) : (

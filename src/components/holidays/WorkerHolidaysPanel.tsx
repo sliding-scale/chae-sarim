@@ -1,14 +1,16 @@
 "use client";
 
+import { AppDataTable, DataTableColumnHeader, TableMuted, TablePerson, TableStatus } from "@/components/lists/AppDataTable";
+import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { RequiredMark } from "@/components/ui/RequiredMark";
-import { Badge } from "@/components/ui/badge";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 
 type HolidayStatus = "draft" | "pending" | "approved" | "rejected";
 
@@ -91,8 +93,8 @@ export function WorkerHolidaysPanel() {
           <p className="invite-note">Loading job sites…</p>
         ) : sites.length === 0 ? (
           <div className="empty-panel">
-            <h3 className="panel-title">No job sites yet</h3>
-            <p className="panel-copy">Ask an admin to add a job site before you request time off.</p>
+            <h3 className="panel-title">No job sites assigned</h3>
+            <p className="panel-copy">Ask an administrator to assign a job site before you request time off.</p>
           </div>
         ) : (
           <form className="timesheet-form" onSubmit={onSubmit} noValidate>
@@ -179,11 +181,6 @@ export function WorkerHolidaysPanel() {
         <p className="panel-copy">Holiday requests you have submitted for {company}.</p>
         {holidays === undefined ? (
           <p className="invite-note">Loading holiday requests…</p>
-        ) : holidays.length === 0 ? (
-          <div className="empty-panel">
-            <h3 className="panel-title">No holiday requests yet</h3>
-            <p className="panel-copy">A request you submit will show up here.</p>
-          </div>
         ) : (
           <HolidayTable rows={holidays} />
         )}
@@ -192,45 +189,60 @@ export function WorkerHolidaysPanel() {
   );
 }
 
+const workerHolidayColumns = createColumnHelper<DataTableFeatures, HolidayRow>();
+
 // Renders the worker's holiday requests.
 function HolidayTable({ rows }: { rows: HolidayRow[] }) {
+  const columns = useMemo(
+    () =>
+      workerHolidayColumns.columns([
+        workerHolidayColumns.accessor("jobSiteName", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
+          cell: ({ row }) => <TablePerson name={row.original.jobSiteName} />,
+          sortFn: "text",
+        }),
+        workerHolidayColumns.accessor("startDate", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Dates" />,
+          cell: ({ row }) => <TableMuted>{`${formatDay(row.original.startDate)} – ${formatDay(row.original.endDate)}`}</TableMuted>,
+          sortFn: "alphanumeric",
+        }),
+        workerHolidayColumns.accessor("reason", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Reason" />,
+          cell: ({ row }) => <TableMuted>{row.original.reason}</TableMuted>,
+          sortFn: "text",
+        }),
+        workerHolidayColumns.accessor((row) => [row.status, row.rejectionReason].filter(Boolean).join(" "), {
+          id: "status",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+          cell: ({ row }) => (
+            <TableStatus
+              label={statusLabel(row.original.status)}
+              detail={row.original.rejectionReason}
+              tone={row.original.status === "rejected" ? "danger" : "default"}
+            />
+          ),
+          sortFn: "text",
+        }),
+      ]),
+    [],
+  );
+
   return (
-    <div className="table-scroll">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th scope="col">Job site</th>
-            <th scope="col">Dates</th>
-            <th scope="col">Reason</th>
-            <th scope="col">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.holidayRequestId}>
-              <td>{row.jobSiteName}</td>
-              <td>
-                {formatDay(row.startDate)} – {formatDay(row.endDate)}
-              </td>
-              <td>{row.reason}</td>
-              <td>
-                <StatusBadge status={row.status} />
-                {row.rejectionReason ? <span className="hours-breakdown">{row.rejectionReason}</span> : null}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <AppDataTable
+      columns={columns}
+      data={rows}
+      searchPlaceholder="Filter requests..."
+      filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+    />
   );
 }
 
-// Shows draft, pending, approved, or rejected as a colored label.
-function StatusBadge({ status }: { status: HolidayStatus }) {
-  if (status === "approved") return <Badge tone="success">Approved</Badge>;
-  if (status === "rejected") return <Badge tone="danger">Rejected</Badge>;
-  if (status === "draft") return <Badge tone="neutral">Draft</Badge>;
-  return <Badge tone="warning">Pending</Badge>;
+// Returns the plain status label for a holiday request.
+function statusLabel(status: HolidayStatus) {
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected";
+  if (status === "draft") return "Draft";
+  return "Pending";
 }
 
 // Shows the holiday request page for the signed-in worker.
@@ -241,7 +253,6 @@ export function WorkerHolidaysPage() {
   return (
     <>
       <header className="page-header">
-        <h2 className="page-title">Holiday requests</h2>
         <p className="page-description">Request time off from a job site at {company}.</p>
       </header>
       <WorkerHolidaysPanel />

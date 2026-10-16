@@ -41,15 +41,23 @@ export const listWorkerJobSites = query({
   ),
   handler: async (ctx) => {
     const membership = await requireWorker(ctx);
-    const sites = await ctx.db
-      .query("jobSites")
-      .withIndex("by_tenant_id_and_name", (q) => q.eq("tenantId", membership.tenantId))
+    const assignments = await ctx.db
+      .query("jobSiteAssignments")
+      .withIndex("by_tenant_id_and_clerk_id", (q) =>
+        q.eq("tenantId", membership.tenantId).eq("clerkId", membership.clerkId),
+      )
       .take(jobSiteLimit);
 
-    return sites.map((site) => ({
-      jobSiteId: site._id,
-      name: site.name,
-      address: site.address ?? null,
-    }));
+    const sites = [];
+    for (const assignment of assignments) {
+      const site = await ctx.db.get(assignment.jobSiteId);
+      if (!site || site.tenantId !== membership.tenantId) continue;
+      sites.push({
+        jobSiteId: site._id,
+        name: site.name,
+        address: site.address ?? null,
+      });
+    }
+    return sites.sort((a, b) => a.name.localeCompare(b.name));
   },
 });

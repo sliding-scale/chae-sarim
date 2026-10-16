@@ -1,13 +1,16 @@
 "use client";
 
+import { AppDataTable, DataTableColumnHeader, TableMuted, TablePerson } from "@/components/lists/AppDataTable";
+import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 
 // Reads a user-facing message from a Convex error.
 function errorText(error: unknown, fallback: string) {
@@ -95,7 +98,9 @@ export function JobSitesPanel() {
     <>
       <section className="saas-card invite-panel">
         <h2 className="panel-title">Add a job site</h2>
-        <p className="panel-copy">Add a place where workers at {company} record time.</p>
+        <p className="panel-copy">
+          Add a place where workers at {company} record time. Assign each site to workers from the Workers page.
+        </p>
         <form className="site-form" onSubmit={onCreate} noValidate>
           <div>
             <label className="form-label" htmlFor="site-name">
@@ -147,127 +152,182 @@ export function JobSitesPanel() {
         <p className="panel-copy">Sites for {company}. A site that already has records cannot be removed.</p>
         {sites === undefined ? (
           <p className="invite-note">Loading job sites…</p>
-        ) : sites.length === 0 ? (
-          <div className="empty-panel">
-            <h3 className="panel-title">No job sites yet</h3>
-            <p className="panel-copy">Sites you add for this company will show up here.</p>
-          </div>
         ) : (
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Address</th>
-                  <th scope="col">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sites.map((site) => {
-                  const editing = editingId === site.jobSiteId;
-                  const busy = busyKey === site.jobSiteId;
-                  return (
-                    <tr key={site.jobSiteId}>
-                      <td>
-                        {editing ? (
-                          <label className="form-label" htmlFor={`site-name-${site.jobSiteId}`}>
-                            Name
-                            <RequiredMark />
-                            <input
-                              id={`site-name-${site.jobSiteId}`}
-                              className="input-saas"
-                              value={editName}
-                              disabled={busy}
-                              onChange={(event) => setEditName(event.target.value)}
-                            />
-                          </label>
-                        ) : (
-                          <strong>{site.name}</strong>
-                        )}
-                      </td>
-                      <td>
-                        {editing ? (
-                          <input
-                            className="input-saas"
-                            aria-label={`Address for ${site.name}`}
-                            value={editAddress}
-                            placeholder="Optional"
-                            disabled={busy}
-                            onChange={(event) => setEditAddress(event.target.value)}
-                          />
-                        ) : (
-                          site.address || "No address"
-                        )}
-                      </td>
-                      <td>
-                        <div className="row-actions">
-                          {editing ? (
-                            <>
-                              <button
-                                type="button"
-                                className="row-action"
-                                disabled={busy}
-                                onClick={() => onSave(site.jobSiteId)}
-                              >
-                                {busy ? "Saving…" : "Save"}
-                              </button>
-                              <button
-                                type="button"
-                                className="row-action"
-                                disabled={busy}
-                                onClick={() => setEditingId(null)}
-                              >
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                className="row-action"
-                                disabled={busy}
-                                onClick={() => startEdit(site.jobSiteId, site.name, site.address)}
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                className="row-action row-action-danger"
-                                disabled={busy}
-                                onClick={() => onRemove(site.jobSiteId, site.name)}
-                              >
-                                {busy ? "Removing…" : "Remove"}
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <SiteTable
+            rows={sites}
+            editingId={editingId}
+            editName={editName}
+            editAddress={editAddress}
+            busyKey={busyKey}
+            onEditName={setEditName}
+            onEditAddress={setEditAddress}
+            onStartEdit={startEdit}
+            onCancel={() => setEditingId(null)}
+            onSave={onSave}
+            onRemove={onRemove}
+          />
         )}
       </section>
     </>
   );
 }
 
+type SiteRow = {
+  jobSiteId: Id<"jobSites">;
+  name: string;
+  address: string | null;
+};
+
+const siteColumns = createColumnHelper<DataTableFeatures, SiteRow>();
+
+// Renders job sites with inline editing and remove actions.
+function SiteTable({
+  rows,
+  editingId,
+  editName,
+  editAddress,
+  busyKey,
+  onEditName,
+  onEditAddress,
+  onStartEdit,
+  onCancel,
+  onSave,
+  onRemove,
+}: {
+  rows: SiteRow[];
+  editingId: Id<"jobSites"> | null;
+  editName: string;
+  editAddress: string;
+  busyKey: string | null;
+  onEditName: (value: string) => void;
+  onEditAddress: (value: string) => void;
+  onStartEdit: (jobSiteId: Id<"jobSites">, name: string, address: string | null) => void;
+  onCancel: () => void;
+  onSave: (jobSiteId: Id<"jobSites">) => void;
+  onRemove: (jobSiteId: Id<"jobSites">, name: string) => void;
+}) {
+  const stateRef = useRef({
+    editingId,
+    editName,
+    editAddress,
+    busyKey,
+    onEditName,
+    onEditAddress,
+    onStartEdit,
+    onCancel,
+    onSave,
+    onRemove,
+  });
+  stateRef.current = {
+    editingId,
+    editName,
+    editAddress,
+    busyKey,
+    onEditName,
+    onEditAddress,
+    onStartEdit,
+    onCancel,
+    onSave,
+    onRemove,
+  };
+
+  const columns = useMemo(
+    () =>
+      siteColumns.columns([
+        siteColumns.accessor("name", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+          sortFn: "text",
+          cell: ({ row }) => {
+            const state = stateRef.current;
+            const editing = state.editingId === row.original.jobSiteId;
+            const busy = state.busyKey === row.original.jobSiteId;
+            if (!editing) return <TablePerson name={row.original.name} />;
+            return (
+              <label className="form-label" htmlFor={`site-name-${row.original.jobSiteId}`}>
+                Name
+                <RequiredMark />
+                <input
+                  id={`site-name-${row.original.jobSiteId}`}
+                  className="input-saas"
+                  value={state.editName}
+                  disabled={busy}
+                  onChange={(event) => state.onEditName(event.target.value)}
+                />
+              </label>
+            );
+          },
+        }),
+        siteColumns.accessor((row) => row.address ?? "", {
+          id: "address",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Address" />,
+          sortFn: "text",
+          cell: ({ row }) => {
+            const state = stateRef.current;
+            const editing = state.editingId === row.original.jobSiteId;
+            const busy = state.busyKey === row.original.jobSiteId;
+            if (!editing) return <TableMuted>{row.original.address || "No address"}</TableMuted>;
+            return (
+              <input
+                className="input-saas"
+                aria-label={`Address for ${row.original.name}`}
+                value={state.editAddress}
+                placeholder="Optional"
+                disabled={busy}
+                onChange={(event) => state.onEditAddress(event.target.value)}
+              />
+            );
+          },
+        }),
+        siteColumns.display({
+          id: "actions",
+          enableSorting: false,
+          enableGlobalFilter: false,
+          cell: ({ row }) => {
+            const state = stateRef.current;
+            const editing = state.editingId === row.original.jobSiteId;
+            const busy = state.busyKey === row.original.jobSiteId;
+            if (editing) {
+              return (
+                <div className="row-actions">
+                  <button type="button" className="row-action" disabled={busy} onClick={() => state.onSave(row.original.jobSiteId)}>
+                    {busy ? "Saving…" : "Save"}
+                  </button>
+                  <button type="button" className="row-action" disabled={busy} onClick={state.onCancel}>
+                    Cancel
+                  </button>
+                </div>
+              );
+            }
+            return (
+              <div className="row-actions">
+                <button
+                  type="button"
+                  className="row-action"
+                  disabled={busy}
+                  onClick={() => state.onStartEdit(row.original.jobSiteId, row.original.name, row.original.address)}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="row-action row-action-danger"
+                  disabled={busy}
+                  onClick={() => state.onRemove(row.original.jobSiteId, row.original.name)}
+                >
+                  {busy ? "Removing…" : "Remove"}
+                </button>
+              </div>
+            );
+          },
+        }),
+      ]),
+    [],
+  );
+
+  return <AppDataTable columns={columns} data={rows} searchPlaceholder="Filter by name or address..." />;
+}
+
 // Shows the job site page for the signed-in admin's company.
 export function JobSitesPage() {
-  const workspace = useWorkspace();
-  const company = workspace.tenantName ?? "your company";
-
-  return (
-    <>
-      <header className="page-header">
-        <h2 className="page-title">Job sites</h2>
-        <p className="page-description">Add, edit, or remove places where workers at {company} record time.</p>
-      </header>
-      <JobSitesPanel />
-    </>
-  );
+  return <JobSitesPanel />;
 }

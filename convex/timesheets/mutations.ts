@@ -3,7 +3,7 @@ import { mutation } from "../_generated/server";
 import {
   hoursValidator,
   requireAdmin,
-  requireJobSite,
+  requireAssignedJobSite,
   requirePendingTimesheet,
   requireWorker,
   rejectionReason,
@@ -45,7 +45,7 @@ export const submitTimesheet = mutation({
   returns: v.id("timesheets"),
   handler: async (ctx, args) => {
     const worker = await requireWorker(ctx);
-    await requireJobSite(ctx, worker.tenantId, args.jobSiteId);
+    await requireAssignedJobSite(ctx, worker.tenantId, worker.clerkId, args.jobSiteId);
     const week = weekRange(args.weekStart);
     const hours = timesheetHours(args.hours);
     const comments = timesheetComments(args.comments);

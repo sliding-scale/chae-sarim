@@ -1,14 +1,16 @@
 "use client";
 
+import { AppDataTable, DataTableColumnHeader, TableFigure, TableMuted, TablePerson, TableStatus } from "@/components/lists/AppDataTable";
+import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { RequiredMark } from "@/components/ui/RequiredMark";
-import { Badge } from "@/components/ui/badge";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 
 const maxFiles = 10;
 const maxBytes = 10 * 1024 * 1024;
@@ -162,8 +164,8 @@ export function WorkerInvoicesPanel() {
           <p className="invite-note">Loading job sites…</p>
         ) : sites.length === 0 ? (
           <div className="empty-panel">
-            <h3 className="panel-title">No job sites yet</h3>
-            <p className="panel-copy">Ask an admin to add a job site before you upload an invoice.</p>
+            <h3 className="panel-title">No job sites assigned</h3>
+            <p className="panel-copy">Ask an administrator to assign a job site before you upload an invoice.</p>
           </div>
         ) : (
           <form className="timesheet-form" onSubmit={onSubmit} noValidate>
@@ -283,11 +285,6 @@ export function WorkerInvoicesPanel() {
         <p className="panel-copy">Invoices you have uploaded for {company}.</p>
         {invoices === undefined ? (
           <p className="invite-note">Loading invoices…</p>
-        ) : invoices.length === 0 ? (
-          <div className="empty-panel">
-            <h3 className="panel-title">No invoices yet</h3>
-            <p className="panel-copy">An invoice you upload will show up here.</p>
-          </div>
         ) : (
           <InvoiceTable rows={invoices} />
         )}
@@ -296,57 +293,84 @@ export function WorkerInvoicesPanel() {
   );
 }
 
+const workerInvoiceColumns = createColumnHelper<DataTableFeatures, InvoiceRow>();
+
 // Renders the worker's uploaded invoices.
 function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
+  const columns = useMemo(
+    () =>
+      workerInvoiceColumns.columns([
+        workerInvoiceColumns.accessor("jobSiteName", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
+          cell: ({ row }) => <TablePerson name={row.original.jobSiteName} />,
+          sortFn: "text",
+        }),
+        workerInvoiceColumns.accessor("invoiceMonth", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Month" />,
+          cell: ({ row }) => <TableMuted>{formatMonth(row.original.invoiceMonth)}</TableMuted>,
+          sortFn: "alphanumeric",
+        }),
+        workerInvoiceColumns.accessor((row) => row.amount ?? 0, {
+          id: "amount",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" align="end" />,
+          cell: ({ row }) =>
+            row.original.amount === null ? (
+              <TableMuted>No amount</TableMuted>
+            ) : (
+              <TableFigure value={formatAmount(row.original.amount)} negative={row.original.amount < 0} />
+            ),
+          sortFn: "alphanumeric",
+        }),
+        workerInvoiceColumns.accessor((row) => row.files.map((file) => file.fileName).join(" "), {
+          id: "files",
+          header: "Files",
+          enableSorting: false,
+          cell: ({ row }) => (
+            <div className="file-links">
+              {row.original.files.map((file) =>
+                file.url ? (
+                  <a key={file.url} href={file.url} target="_blank" rel="noreferrer">
+                    {file.fileName}
+                  </a>
+                ) : (
+                  <span key={file.fileName}>{file.fileName}</span>
+                ),
+              )}
+            </div>
+          ),
+        }),
+        workerInvoiceColumns.accessor((row) => [row.status, row.rejectionReason].filter(Boolean).join(" "), {
+          id: "status",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+          cell: ({ row }) => (
+            <TableStatus
+              label={statusLabel(row.original.status)}
+              detail={row.original.rejectionReason}
+              tone={row.original.status === "rejected" ? "danger" : "default"}
+            />
+          ),
+          sortFn: "text",
+        }),
+      ]),
+    [],
+  );
+
   return (
-    <div className="table-scroll">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th scope="col">Job site</th>
-            <th scope="col">Month</th>
-            <th scope="col">Amount</th>
-            <th scope="col">Files</th>
-            <th scope="col">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.invoiceId}>
-              <td>{row.jobSiteName}</td>
-              <td>{formatMonth(row.invoiceMonth)}</td>
-              <td>{formatAmount(row.amount)}</td>
-              <td>
-                <div className="file-links">
-                  {row.files.map((file) =>
-                    file.url ? (
-                      <a key={file.url} href={file.url} target="_blank" rel="noreferrer">
-                        {file.fileName}
-                      </a>
-                    ) : (
-                      <span key={file.fileName}>{file.fileName}</span>
-                    ),
-                  )}
-                </div>
-              </td>
-              <td>
-                <StatusBadge status={row.status} />
-                {row.rejectionReason ? <span className="hours-breakdown">{row.rejectionReason}</span> : null}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <AppDataTable
+      columns={columns}
+      data={rows}
+      searchPlaceholder="Filter invoices..."
+      filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+    />
   );
 }
 
-// Shows draft, pending, approved, or rejected as a colored label.
-function StatusBadge({ status }: { status: InvoiceStatus }) {
-  if (status === "approved") return <Badge tone="success">Approved</Badge>;
-  if (status === "rejected") return <Badge tone="danger">Rejected</Badge>;
-  if (status === "draft") return <Badge tone="neutral">Draft</Badge>;
-  return <Badge tone="warning">Pending</Badge>;
+// Returns the plain status label for an invoice.
+function statusLabel(status: InvoiceStatus) {
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected";
+  if (status === "draft") return "Draft";
+  return "Pending";
 }
 
 // Shows the invoice page for the signed-in worker.
@@ -357,7 +381,6 @@ export function WorkerInvoicesPage() {
   return (
     <>
       <header className="page-header">
-        <h2 className="page-title">Invoices</h2>
         <p className="page-description">Upload an invoice for a job site at {company}.</p>
       </header>
       <WorkerInvoicesPanel />

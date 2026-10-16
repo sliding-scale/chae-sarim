@@ -1,15 +1,15 @@
 "use client";
 
 import { useWorkspace } from "@/components/layout/RoleGate";
+import { CompanySettings } from "@/components/profile/CompanySettings";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { useUser } from "@clerk/nextjs";
 import { ConvexError } from "convex/values";
 import { useMutation } from "convex/react";
 import { FormEvent, useEffect, useState } from "react";
-
-type Theme = "light" | "dark";
 
 // Reads a short message from a Clerk or Convex error.
 function errorText(error: unknown) {
@@ -22,18 +22,19 @@ function errorText(error: unknown) {
   return "Could not save your profile.";
 }
 
-// Lets the signed-in person update their photo, name, and color theme.
+// Lets the signed-in person update their photo and name.
 export function ProfileSettings() {
   const workspace = useWorkspace();
   const { isLoaded, user } = useUser();
   const updateProfileName = useMutation(api.users.mutations.updateProfileName);
+  const generateUploadUrl = useMutation(api.users.mutations.generateProfileImageUploadUrl);
+  const setProfileImage = useMutation(api.users.mutations.setProfileImage);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [seeded, setSeeded] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [cleared, setCleared] = useState(false);
-  const [theme, setTheme] = useState<Theme>("light");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -46,27 +47,29 @@ export function ProfileSettings() {
   }, [seeded, user]);
 
   useEffect(() => {
-    setTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
-  }, []);
-
-  useEffect(() => {
     if (!file) return;
     const url = URL.createObjectURL(file);
     setPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  const imageUrl = preview || (cleared || !user?.hasImage ? null : user.imageUrl);
+  const imageUrl = preview || (cleared ? null : workspace.imageUrl || (user?.hasImage ? user.imageUrl : null));
   const email = user?.primaryEmailAddress?.emailAddress || workspace.email;
 
-  // Applies light or dark mode and remembers the choice on this browser.
-  function chooseTheme(next: Theme) {
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem("chae-theme", next);
-    setTheme(next);
+  // Uploads a chosen profile photo and returns its storage id.
+  async function uploadPhoto(photo: File) {
+    const uploadUrl = await generateUploadUrl();
+    const response = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": photo.type || "application/octet-stream" },
+      body: photo,
+    });
+    const body = (await response.json()) as { storageId?: Id<"_storage"> };
+    if (!response.ok || !body.storageId) throw new Error("Could not upload that photo.");
+    return body.storageId;
   }
 
-  // Saves the photo and name to Clerk, then stores the display name in Convex.
+  // Saves the photo on the Convex user and the name in Clerk and Convex.
   async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!user) return;
@@ -82,8 +85,13 @@ export function ProfileSettings() {
     setError("");
     setSaved(false);
     try {
-      if (file) await user.setProfileImage({ file });
-      else if (cleared && user.hasImage) await user.setProfileImage({ file: null });
+      if (file) {
+        await setProfileImage({ imageStorageId: await uploadPhoto(file) });
+        await user.setProfileImage({ file });
+      } else if (cleared) {
+        await setProfileImage({ imageStorageId: null });
+        if (user.hasImage) await user.setProfileImage({ file: null });
+      }
       await user.update({ firstName: nextFirst, lastName: nextLast });
       await updateProfileName({ name: [nextFirst, nextLast].filter(Boolean).join(" ") });
       setFile(null);
@@ -99,10 +107,13 @@ export function ProfileSettings() {
 
   return (
     <div className="profile-layout">
-      <div>
-        <h2 className="panel-title">Profile</h2>
-        <p className="page-description">Update how your name and photo appear in the dashboard.</p>
-      </div>
+      <section className="profile-section" aria-labelledby="personal-profile-heading">
+        <header className="profile-section-heading">
+          <h2 id="personal-profile-heading" className="profile-section-title">
+            Personal profile
+          </h2>
+          <p className="page-description">Update how your name and photo appear in the dashboard.</p>
+        </header>
 
       <form className="saas-card panel profile-card" onSubmit={onSave}>
         <div className="profile-photo-row">
@@ -200,31 +211,21 @@ export function ProfileSettings() {
           {busy ? "Saving…" : "Save profile"}
         </button>
       </form>
-
-      <section className="saas-card panel profile-card">
-        <h2 className="panel-title">Appearance</h2>
-        <p className="page-description">Choose a theme for this browser.</p>
-        <div className="theme-options" role="radiogroup" aria-label="Color theme">
-          <button
-            type="button"
-            className={theme === "light" ? "theme-option is-selected" : "theme-option"}
-            role="radio"
-            aria-checked={theme === "light"}
-            onClick={() => chooseTheme("light")}
-          >
-            Light
-          </button>
-          <button
-            type="button"
-            className={theme === "dark" ? "theme-option is-selected" : "theme-option"}
-            role="radio"
-            aria-checked={theme === "dark"}
-            onClick={() => chooseTheme("dark")}
-          >
-            Dark
-          </button>
-        </div>
       </section>
+
+      {workspace.role === "admin" ? (
+        <section className="profile-section" aria-labelledby="company-profile-heading">
+          <header className="profile-section-heading">
+            <h2 id="company-profile-heading" className="profile-section-title">
+              Company profile
+            </h2>
+            <p className="page-description">
+              Update the photo, name, and contact details workers see for this company.
+            </p>
+          </header>
+          <CompanySettings />
+        </section>
+      ) : null}
     </div>
   );
 }

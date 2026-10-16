@@ -6,11 +6,13 @@ import { AuthError } from "@/components/auth/AuthError";
 import { AuthInput } from "@/components/auth/AuthInput";
 import { useSignUp } from "@clerk/nextjs";
 import Link from "next/link";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 // Creates an account with a password or Google, then confirms the email when Clerk asks.
 export function SignUpForm() {
   const { signUp, errors, fetchStatus } = useSignUp();
+  const ticket = useSearchParams().get("__clerk_ticket");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,6 +22,8 @@ export function SignUpForm() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [accepted, setAccepted] = useState(false);
+  const finishing = useRef(false);
   const busy = fetchStatus === "fetching";
 
   // Sends the browser to the dashboard after Clerk finishes sign-up.
@@ -31,8 +35,52 @@ export function SignUpForm() {
 
   // Opens the dashboard once sign-up is complete.
   async function finish() {
-    if (signUp.status !== "complete") return;
-    await signUp.finalize({ navigate: goDashboard() });
+    if (finishing.current || signUp.status !== "complete") return;
+    finishing.current = true;
+    const finalized = await signUp.finalize({ navigate: goDashboard() });
+    if (finalized.error) {
+      finishing.current = false;
+      setLocalError(finalized.error.longMessage || finalized.error.message);
+    }
+  }
+
+  useEffect(() => {
+    if (!accepted || signUp.status !== "complete") return;
+    void finish();
+  }, [accepted, finish]);
+
+  // Accepts a Clerk invite link and stores the name and password the worker chose.
+  async function onAcceptInvite(event: React.FormEvent) {
+    event.preventDefault();
+    if (!ticket) return;
+    const next: Record<string, string> = {};
+    if (name.trim().length < 2) next.name = "Enter your full name.";
+    if (!password) next.password = "Enter a password.";
+    if (confirm !== password) next.confirm = "Passwords do not match.";
+    setFieldErrors(next);
+    setLocalError(null);
+    setNotice(null);
+    if (Object.keys(next).length) return;
+
+    const [firstName, ...rest] = name.trim().split(/\s+/);
+    const result = await signUp.create({
+      strategy: "ticket",
+      ticket,
+      password,
+      firstName,
+      lastName: rest.join(" ") || undefined,
+      legalAccepted: true,
+    });
+    if (result.error) {
+      setLocalError(result.error.longMessage || result.error.message);
+      return;
+    }
+    setAccepted(true);
+    if (signUp.status === "complete") {
+      await finish();
+      return;
+    }
+    setLocalError("Could not finish joining. Open the link in your email and try again.");
   }
 
   // Creates the account from the name, email, and password in the form.
@@ -41,7 +89,7 @@ export function SignUpForm() {
     const next: Record<string, string> = {};
     if (name.trim().length < 2) next.name = "Enter your full name.";
     if (!email.includes("@")) next.email = "Enter a valid work email.";
-    if (password.length < 8) next.password = "Use at least 8 characters.";
+    if (!password) next.password = "Enter a password.";
     if (confirm !== password) next.confirm = "Passwords do not match.";
     setFieldErrors(next);
     setLocalError(null);
@@ -116,6 +164,50 @@ export function SignUpForm() {
   }
 
   const alert = localError || errors.global?.[0]?.longMessage || errors.global?.[0]?.message || null;
+
+  if (ticket) {
+    return (
+      <AuthCard title="Accept your invite" description="Choose a password to join your company.">
+        <AuthError message={alert} />
+        <div id="clerk-captcha" />
+        <form onSubmit={onAcceptInvite} noValidate>
+          <AuthInput
+            id="name"
+            label="Full name"
+            autoComplete="name"
+            placeholder="Sarah Khan"
+            value={name}
+            error={fieldErrors.name}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <AuthInput
+            id="password"
+            label="Password"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Create a password"
+            value={password}
+            error={fieldErrors.password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          <AuthInput
+            id="confirm"
+            label="Confirm password"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Repeat your password"
+            value={confirm}
+            error={fieldErrors.confirm}
+            onChange={(event) => setConfirm(event.target.value)}
+          />
+          <button className="btn-primary btn-block" type="submit" disabled={busy}>
+            {busy ? <span className="spinner" aria-hidden="true" /> : null}
+            {busy ? "Joining..." : "Join company"}
+          </button>
+        </form>
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard title="Create your dashboard" description="Set up your account and start managing access.">

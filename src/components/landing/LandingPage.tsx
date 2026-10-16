@@ -4,7 +4,7 @@ import { MarketingNavbar } from "@/components/layout/MarketingNavbar";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Badge } from "@/components/ui/badge";
-import { KeyRound, ScrollText, ShieldCheck, Users } from "lucide-react";
+import { Activity, KeyRound, ScrollText, ShieldCheck, Users } from "lucide-react";
 
 const features = [
   {
@@ -47,7 +47,7 @@ const security = [
 // Renders the public marketing page.
 export function LandingPage() {
   return (
-    <div className="page-shell">
+    <div className="page-shell landing-page">
       <MarketingNavbar />
       <main>
         <section className="hero-section">
@@ -93,27 +93,30 @@ export function LandingPage() {
                     </div>
                     <div className="dashboard-content">
                       <div className="stats-grid">
-                        <StatCard label="Total users" value="248" trend="+8.2% this month" />
-                        <StatCard label="Administrators" value="12" />
-                        <StatCard label="Workers" value="236" />
-                        <StatCard label="Active today" value="184" />
+                        <StatCard icon={Users} label="Total users" value="248" trend="+12 from last month" />
+                        <StatCard icon={ShieldCheck} label="Administrators" value="12" trend="+1 new member" />
+                        <StatCard icon={Users} label="Workers" value="236" trend="+8 this month" />
+                        <StatCard icon={Activity} label="Active today" value="184" trend="+5% from last week" />
                       </div>
                       <div className="stack">
-                        <section className="saas-card panel">
-                          <h2 className="panel-title">Recent activity</h2>
+                        <section className="saas-card feed-card">
+                          <header className="feed-card-heading">
+                            <h2 className="panel-title">Recent activity</h2>
+                            <p>Latest updates from your team</p>
+                          </header>
                           <ActivityFeed
                             items={[
                               {
                                 id: "1",
                                 actor: "Sarah Khan",
-                                action: "Changed Alex Johnson's role",
+                                action: "changed Alex Johnson's role",
                                 meta: "Administrator → Worker",
                                 time: "2 min ago",
                               },
                               {
                                 id: "2",
                                 actor: "John Smith",
-                                action: "Created a new worker account",
+                                action: "created a new worker account",
                                 time: "8 min ago",
                               },
                             ]}

@@ -1,13 +1,15 @@
 "use client";
 
+import { AppDataTable, DataTableColumnHeader, TableFigure, TableMuted, TablePerson, TableStatus, emailHandle } from "@/components/lists/AppDataTable";
+import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { Badge } from "@/components/ui/badge";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 const dayLabels = [
   ["monday", "Mon"],
@@ -66,6 +68,7 @@ export function TimesheetsPanel() {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<Id<"timesheets"> | null>(null);
   const confirm = useConfirm();
+  const rows = timesheets ? [...timesheets.pending, ...timesheets.reviewed] : undefined;
 
   // Approves or rejects one pending timesheet after the admin confirms.
   async function onDecide(row: TimesheetRow, status: "approved" | "rejected") {
@@ -96,38 +99,23 @@ export function TimesheetsPanel() {
   return (
     <>
       <section className="saas-card invite-panel">
-        <h2 className="panel-title">Waiting for review</h2>
+        <h2 className="panel-title">Timesheets</h2>
         <p className="panel-copy">
-          Weekly hours workers at {company} have submitted. Approving or rejecting a timesheet records that
-          decision.
+          Weekly hours workers at {company} have submitted. Approving or rejecting a pending timesheet records
+          that decision.
         </p>
         {error ? <p className="field-error">{error}</p> : null}
-        {timesheets === undefined ? (
+        {rows === undefined ? (
           <p className="invite-note">Loading timesheets…</p>
-        ) : timesheets.pending.length === 0 ? (
-          <div className="empty-panel">
-            <h3 className="panel-title">Nothing to review</h3>
-            <p className="panel-copy">Timesheets waiting for approval will show up here.</p>
-          </div>
         ) : (
-          <TimesheetTable
-            rows={timesheets.pending}
-            busyId={busyId}
-            onDecide={onDecide}
-          />
+          <TimesheetTable rows={rows} busyId={busyId} onDecide={onDecide} />
         )}
       </section>
-
-      {timesheets && timesheets.reviewed.length > 0 ? (
-        <section className="saas-card stack-card">
-          <h2 className="panel-title">Reviewed</h2>
-          <p className="panel-copy">Timesheets already approved or rejected for {company}.</p>
-          <TimesheetTable rows={timesheets.reviewed} busyId={null} />
-        </section>
-      ) : null}
     </>
   );
 }
+
+const timesheetColumns = createColumnHelper<DataTableFeatures, TimesheetRow>();
 
 // Renders one timesheet table, with approve and reject actions when a handler is provided.
 function TimesheetTable({
@@ -139,98 +127,110 @@ function TimesheetTable({
   busyId: Id<"timesheets"> | null;
   onDecide?: (row: TimesheetRow, status: "approved" | "rejected") => void;
 }) {
-  return (
-    <div className="table-scroll">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th scope="col">Worker</th>
-            <th scope="col">Job site</th>
-            <th scope="col">Week</th>
-            <th scope="col">Hours</th>
-            <th scope="col">Comments</th>
-            <th scope="col">Status</th>
-            {onDecide ? (
-              <th scope="col">
-                <span className="sr-only">Actions</span>
-              </th>
-            ) : null}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const busy = busyId === row.timesheetId;
-            return (
-              <tr key={row.timesheetId}>
-                <td>
-                  <strong>{row.workerName}</strong>
-                  <span className="hours-breakdown">{row.workerEmail || "No email on file"}</span>
-                </td>
-                <td>{row.jobSiteName}</td>
-                <td>
-                  {formatDay(row.weekStart)} – {formatDay(row.weekEnd)}
-                </td>
-                <td>
-                  <strong>{formatHours(row.totalHours)}h</strong>
-                  <span className="hours-breakdown">
-                    {dayLabels.map(([key, label]) => `${label} ${formatHours(row.hours[key])}`).join(" · ")}
-                  </span>
-                </td>
-                <td>{row.comments || "No comments"}</td>
-                <td>
-                  <StatusBadge status={row.status} />
-                  {row.rejectionReason ? <span className="hours-breakdown">{row.rejectionReason}</span> : null}
-                </td>
-                {onDecide ? (
-                  <td>
+  const columns = useMemo(
+    () =>
+      timesheetColumns.columns([
+        timesheetColumns.accessor((row) => `${row.workerName} ${row.workerEmail}`, {
+          id: "worker",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Worker" />,
+          cell: ({ row }) => (
+            <TablePerson
+              name={row.original.workerName}
+              detail={row.original.workerEmail ? emailHandle(row.original.workerEmail) : "No email on file"}
+            />
+          ),
+          sortFn: "text",
+        }),
+        timesheetColumns.accessor("jobSiteName", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
+          cell: ({ row }) => <TableMuted>{row.original.jobSiteName}</TableMuted>,
+          sortFn: "text",
+        }),
+        timesheetColumns.accessor("weekStart", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Week" />,
+          cell: ({ row }) => <TableMuted>{`${formatDay(row.original.weekStart)} – ${formatDay(row.original.weekEnd)}`}</TableMuted>,
+          sortFn: "alphanumeric",
+        }),
+        timesheetColumns.accessor("totalHours", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Hours" align="end" />,
+          cell: ({ row }) => (
+            <div className="table-figure-stack">
+              <TableFigure value={`${formatHours(row.original.totalHours)}h`} />
+              <span className="table-person-detail">
+                {dayLabels.map(([key, label]) => `${label} ${formatHours(row.original.hours[key])}`).join(" · ")}
+              </span>
+            </div>
+          ),
+          sortFn: "alphanumeric",
+        }),
+        timesheetColumns.accessor((row) => row.comments ?? "", {
+          id: "comments",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Comments" />,
+          cell: ({ row }) => <TableMuted>{row.original.comments || "No comments"}</TableMuted>,
+          sortFn: "text",
+        }),
+        timesheetColumns.accessor((row) => [row.status, row.rejectionReason].filter(Boolean).join(" "), {
+          id: "status",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+          cell: ({ row }) => (
+            <TableStatus
+              label={statusLabel(row.original.status)}
+              detail={row.original.rejectionReason}
+              tone={row.original.status === "rejected" ? "danger" : "default"}
+            />
+          ),
+          sortFn: "text",
+        }),
+        ...(onDecide
+          ? [
+              timesheetColumns.display({
+                id: "actions",
+                enableSorting: false,
+                enableGlobalFilter: false,
+                cell: ({ row }) => {
+                  if (row.original.status !== "pending") return null;
+                  const busy = busyId === row.original.timesheetId;
+                  return (
                     <div className="row-actions">
-                      <button
-                        type="button"
-                        className="row-action"
-                        disabled={busy}
-                        onClick={() => onDecide(row, "approved")}
-                      >
+                      <button type="button" className="row-action" disabled={busy} onClick={() => onDecide(row.original, "approved")}>
                         {busy ? "Saving…" : "Approve"}
                       </button>
                       <button
                         type="button"
                         className="row-action row-action-danger"
                         disabled={busy}
-                        onClick={() => onDecide(row, "rejected")}
+                        onClick={() => onDecide(row.original, "rejected")}
                       >
                         {busy ? "Saving…" : "Reject"}
                       </button>
                     </div>
-                  </td>
-                ) : null}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                  );
+                },
+              }),
+            ]
+          : []),
+      ]),
+    [busyId, onDecide],
+  );
+
+  return (
+    <AppDataTable
+      columns={columns}
+      data={rows}
+      searchPlaceholder="Filter timesheets..."
+      filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+    />
   );
 }
 
-// Shows pending, approved, or rejected as a colored label.
-function StatusBadge({ status }: { status: TimesheetStatus }) {
-  if (status === "approved") return <Badge tone="success">Approved</Badge>;
-  if (status === "rejected") return <Badge tone="danger">Rejected</Badge>;
-  return <Badge tone="warning">Pending</Badge>;
+// Returns the plain status label for a timesheet.
+function statusLabel(status: TimesheetStatus) {
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected";
+  return "Pending";
 }
 
 // Shows the timesheet review page for the signed-in admin's company.
 export function AdminTimesheetsPage() {
-  const workspace = useWorkspace();
-  const company = workspace.tenantName ?? "your company";
-
-  return (
-    <>
-      <header className="page-header">
-        <h2 className="page-title">Timesheets</h2>
-        <p className="page-description">Review weekly hours submitted by workers at {company}.</p>
-      </header>
-      <TimesheetsPanel />
-    </>
-  );
+  return <TimesheetsPanel />;
 }

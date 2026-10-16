@@ -196,3 +196,105 @@ export const getWorkerOverview = query({
     return { timesheetCount, invoiceCount, holidayCount, submissions };
   },
 });
+
+const statLimit = 200;
+
+// Counts workers, job sites, and pending reviews for the signed-in admin.
+export const getAdminStats = query({
+  args: {},
+  returns: v.object({
+    workers: v.number(),
+    jobSites: v.number(),
+    pendingTimesheets: v.number(),
+    pendingInvoices: v.number(),
+    pendingHolidays: v.number(),
+  }),
+  handler: async (ctx) => {
+    const membership = await requireAdmin(ctx);
+    const tenantId = membership.tenantId;
+
+    const workers = await ctx.db
+      .query("memberships")
+      .withIndex("by_tenant_id_and_role", (q) => q.eq("tenantId", tenantId).eq("role", "worker"))
+      .take(statLimit);
+    const jobSites = await ctx.db
+      .query("jobSites")
+      .withIndex("by_tenant_id_and_name", (q) => q.eq("tenantId", tenantId))
+      .take(statLimit);
+    const pendingTimesheets = await ctx.db
+      .query("timesheets")
+      .withIndex("by_tenant_id_and_status", (q) => q.eq("tenantId", tenantId).eq("status", "pending"))
+      .take(statLimit);
+    const pendingInvoices = await ctx.db
+      .query("workerInvoices")
+      .withIndex("by_tenant_id_and_status", (q) => q.eq("tenantId", tenantId).eq("status", "pending"))
+      .take(statLimit);
+    const pendingHolidays = await ctx.db
+      .query("holidayRequests")
+      .withIndex("by_tenant_id_and_status", (q) => q.eq("tenantId", tenantId).eq("status", "pending"))
+      .take(statLimit);
+
+    return {
+      workers: workers.length,
+      jobSites: jobSites.length,
+      pendingTimesheets: pendingTimesheets.length,
+      pendingInvoices: pendingInvoices.length,
+      pendingHolidays: pendingHolidays.length,
+    };
+  },
+});
+
+// Counts the signed-in worker's timesheets, invoices, and holiday requests.
+export const getWorkerStats = query({
+  args: {},
+  returns: v.object({
+    timesheets: v.number(),
+    pendingTimesheets: v.number(),
+    invoices: v.number(),
+    pendingInvoices: v.number(),
+    holidays: v.number(),
+    pendingHolidays: v.number(),
+  }),
+  handler: async (ctx) => {
+    const membership = await requireWorker(ctx);
+    const tenantId = membership.tenantId;
+    let timesheets = 0;
+    let pendingTimesheets = 0;
+    let invoices = 0;
+    let pendingInvoices = 0;
+    let holidays = 0;
+    let pendingHolidays = 0;
+
+    const timesheetRows = await ctx.db
+      .query("timesheets")
+      .withIndex("by_clerk_id_and_week_start", (q) => q.eq("clerkId", membership.clerkId))
+      .take(statLimit);
+    for (const timesheet of timesheetRows) {
+      if (timesheet.tenantId !== tenantId) continue;
+      timesheets += 1;
+      if (timesheet.status === "pending") pendingTimesheets += 1;
+    }
+
+    const invoiceRows = await ctx.db
+      .query("workerInvoices")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", membership.clerkId))
+      .take(statLimit);
+    for (const invoice of invoiceRows) {
+      if (invoice.tenantId !== tenantId) continue;
+      invoices += 1;
+      if (invoice.status === "pending") pendingInvoices += 1;
+    }
+
+    const holidayRows = await ctx.db
+      .query("holidayRequests")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", membership.clerkId))
+      .take(statLimit);
+    for (const holiday of holidayRows) {
+      if (holiday.tenantId !== tenantId) continue;
+      holidays += 1;
+      if (holiday.status === "pending") pendingHolidays += 1;
+    }
+
+    return { timesheets, pendingTimesheets, invoices, pendingInvoices, holidays, pendingHolidays };
+  },
+});

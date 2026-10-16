@@ -1,11 +1,16 @@
 import { ConvexError, v } from "convex/values";
-import { mutation } from "../_generated/server";
-import { normalizeEmail, requireAdmin } from "../lib";
+import { internalMutation } from "../_generated/server";
+import { normalizeEmail, notifyAdminsOfInvite, requireAdmin } from "../lib";
 
-// Stores a pending worker invite for the signed-in admin's company.
-export const inviteWorker = mutation({
+const accountLookupLimit = 5;
+
+// Reserves a worker invite for the signed-in admin's company.
+export const reserveInvite = internalMutation({
   args: { email: v.string() },
-  returns: v.id("invites"),
+  returns: v.object({
+    inviteId: v.id("invites"),
+    tenantName: v.string(),
+  }),
   handler: async (ctx, args) => {
     const membership = await requireAdmin(ctx);
     const email = normalizeEmail(args.email);
@@ -13,7 +18,7 @@ export const inviteWorker = mutation({
     const accounts = await ctx.db
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", email))
-      .take(5);
+      .take(accountLookupLimit);
     for (const account of accounts) {
       const existingMembership = await ctx.db
         .query("memberships")
@@ -27,7 +32,7 @@ export const inviteWorker = mutation({
             : "That person is already a worker here.",
         );
       }
-      throw new ConvexError("That email already belongs to another company.");
+      throw new ConvexError("That email can't be invited.");
     }
 
     const existing = await ctx.db
@@ -35,23 +40,54 @@ export const inviteWorker = mutation({
       .withIndex("by_email", (q) => q.eq("email", email))
       .unique();
     if (existing) {
-      throw new ConvexError(
-        existing.tenantId === membership.tenantId
-          ? "That email already has a pending invite."
-          : "That email already has an invite for another company.",
-      );
+      if (existing.tenantId === membership.tenantId) {
+        throw new ConvexError("That email already has a pending invite.");
+      }
+      throw new ConvexError("That email can't be invited.");
     }
 
-    return await ctx.db.insert("invites", {
+    const tenant = await ctx.db.get(membership.tenantId);
+    const inviteId = await ctx.db.insert("invites", {
       email,
       tenantId: membership.tenantId,
       role: "worker",
     });
+    return {
+      inviteId,
+      tenantName: tenant?.name ?? "your company",
+    };
   },
 });
 
-// Deletes a pending invite that belongs to the signed-in admin's company.
-export const revokeInvite = mutation({
+// Stores the Clerk invitation id on an invite that is still pending.
+export const attachInvitationId = internalMutation({
+  args: { inviteId: v.id("invites"), clerkInvitationId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const membership = await requireAdmin(ctx);
+    const invite = await ctx.db.get(args.inviteId);
+    if (!invite || invite.tenantId !== membership.tenantId) return null;
+    await ctx.db.patch(invite._id, { clerkInvitationId: args.clerkInvitationId });
+    await notifyAdminsOfInvite(ctx, invite.tenantId, invite.email, invite._id);
+    return null;
+  },
+});
+
+// Deletes an invite that is still pending for the signed-in admin's company.
+export const releaseInvite = internalMutation({
+  args: { inviteId: v.id("invites") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const membership = await requireAdmin(ctx);
+    const invite = await ctx.db.get(args.inviteId);
+    if (!invite || invite.tenantId !== membership.tenantId) return null;
+    await ctx.db.delete(invite._id);
+    return null;
+  },
+});
+
+// Deletes a pending invite after its Clerk user has been removed.
+export const deleteInviteByEmail = internalMutation({
   args: { email: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -61,10 +97,7 @@ export const revokeInvite = mutation({
       .query("invites")
       .withIndex("by_email", (q) => q.eq("email", email))
       .unique();
-    if (!invite || invite.tenantId !== membership.tenantId) {
-      throw new ConvexError("That invite is not pending for this company.");
-    }
-
+    if (!invite || invite.tenantId !== membership.tenantId) return null;
     await ctx.db.delete(invite._id);
     return null;
   },

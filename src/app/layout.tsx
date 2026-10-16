@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 // Holds the page shell while auth state is still resolving.
 function ShellFallback() {
-  return <main className="min-h-full flex-1" aria-busy="true" />;
+  return <main className="shell-fallback" aria-busy="true" />;
 }
 
 // Wraps every page with the shared document, fonts, and Convex client.
@@ -24,12 +24,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{var t=localStorage.getItem('chae-theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t;}catch(e){}",
+              "try{if(location.pathname!=='/'){var t=localStorage.getItem('chae-theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t;}}catch(e){}",
           }}
         />
       </head>
       <body className="min-h-full flex flex-col">
-        <ThemeSync />
+        <Suspense fallback={null}>
+          <ThemeSync />
+        </Suspense>
         <ClerkProvider appearance={{ theme: shadcn }}>
           <Suspense fallback={<ShellFallback />}>
             <ConvexClientProvider>{children}</ConvexClientProvider>

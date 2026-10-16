@@ -1,13 +1,15 @@
 "use client";
 
+import { AppDataTable, DataTableColumnHeader, TableMuted, TablePerson, TableStatus, emailHandle } from "@/components/lists/AppDataTable";
+import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { Badge } from "@/components/ui/badge";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 type HolidayStatus = "pending" | "approved" | "rejected";
 
@@ -49,6 +51,7 @@ export function HolidaysPanel() {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<Id<"holidayRequests"> | null>(null);
   const confirm = useConfirm();
+  const rows = holidays ? [...holidays.pending, ...holidays.reviewed] : undefined;
 
   // Approves or rejects one pending holiday request after the admin confirms.
   async function onDecide(row: HolidayRow, status: "approved" | "rejected") {
@@ -79,33 +82,23 @@ export function HolidaysPanel() {
   return (
     <>
       <section className="saas-card invite-panel">
-        <h2 className="panel-title">Waiting for review</h2>
+        <h2 className="panel-title">Holiday requests</h2>
         <p className="panel-copy">
-          Time off workers at {company} have requested. Approving or rejecting a request records that decision.
+          Time off workers at {company} have requested. Approving or rejecting a pending request records that
+          decision.
         </p>
         {error ? <p className="field-error">{error}</p> : null}
-        {holidays === undefined ? (
+        {rows === undefined ? (
           <p className="invite-note">Loading holiday requests…</p>
-        ) : holidays.pending.length === 0 ? (
-          <div className="empty-panel">
-            <h3 className="panel-title">Nothing to review</h3>
-            <p className="panel-copy">Holiday requests waiting for approval will show up here.</p>
-          </div>
         ) : (
-          <HolidayTable rows={holidays.pending} busyId={busyId} onDecide={onDecide} />
+          <HolidayTable rows={rows} busyId={busyId} onDecide={onDecide} />
         )}
       </section>
-
-      {holidays && holidays.reviewed.length > 0 ? (
-        <section className="saas-card stack-card">
-          <h2 className="panel-title">Reviewed</h2>
-          <p className="panel-copy">Holiday requests already approved or rejected for {company}.</p>
-          <HolidayTable rows={holidays.reviewed} busyId={null} />
-        </section>
-      ) : null}
     </>
   );
 }
+
+const holidayColumns = createColumnHelper<DataTableFeatures, HolidayRow>();
 
 // Renders one holiday table, with approve and reject actions when a handler is provided.
 function HolidayTable({
@@ -117,91 +110,97 @@ function HolidayTable({
   busyId: Id<"holidayRequests"> | null;
   onDecide?: (row: HolidayRow, status: "approved" | "rejected") => void;
 }) {
-  return (
-    <div className="table-scroll">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th scope="col">Worker</th>
-            <th scope="col">Job site</th>
-            <th scope="col">Dates</th>
-            <th scope="col">Reason</th>
-            <th scope="col">Status</th>
-            {onDecide ? (
-              <th scope="col">
-                <span className="sr-only">Actions</span>
-              </th>
-            ) : null}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const busy = busyId === row.holidayRequestId;
-            return (
-              <tr key={row.holidayRequestId}>
-                <td>
-                  <strong>{row.workerName}</strong>
-                  <span className="hours-breakdown">{row.workerEmail || "No email on file"}</span>
-                </td>
-                <td>{row.jobSiteName}</td>
-                <td>
-                  {formatDay(row.startDate)} – {formatDay(row.endDate)}
-                </td>
-                <td>{row.reason}</td>
-                <td>
-                  <StatusBadge status={row.status} />
-                  {row.rejectionReason ? <span className="hours-breakdown">{row.rejectionReason}</span> : null}
-                </td>
-                {onDecide ? (
-                  <td>
+  const columns = useMemo(
+    () =>
+      holidayColumns.columns([
+        holidayColumns.accessor((row) => `${row.workerName} ${row.workerEmail}`, {
+          id: "worker",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Worker" />,
+          cell: ({ row }) => (
+            <TablePerson
+              name={row.original.workerName}
+              detail={row.original.workerEmail ? emailHandle(row.original.workerEmail) : "No email on file"}
+            />
+          ),
+          sortFn: "text",
+        }),
+        holidayColumns.accessor("jobSiteName", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
+          cell: ({ row }) => <TableMuted>{row.original.jobSiteName}</TableMuted>,
+          sortFn: "text",
+        }),
+        holidayColumns.accessor("startDate", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Dates" />,
+          cell: ({ row }) => <TableMuted>{`${formatDay(row.original.startDate)} – ${formatDay(row.original.endDate)}`}</TableMuted>,
+          sortFn: "alphanumeric",
+        }),
+        holidayColumns.accessor("reason", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Reason" />,
+          cell: ({ row }) => <TableMuted>{row.original.reason}</TableMuted>,
+          sortFn: "text",
+        }),
+        holidayColumns.accessor((row) => [row.status, row.rejectionReason].filter(Boolean).join(" "), {
+          id: "status",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+          cell: ({ row }) => (
+            <TableStatus
+              label={statusLabel(row.original.status)}
+              detail={row.original.rejectionReason}
+              tone={row.original.status === "rejected" ? "danger" : "default"}
+            />
+          ),
+          sortFn: "text",
+        }),
+        ...(onDecide
+          ? [
+              holidayColumns.display({
+                id: "actions",
+                enableSorting: false,
+                enableGlobalFilter: false,
+                cell: ({ row }) => {
+                  if (row.original.status !== "pending") return null;
+                  const busy = busyId === row.original.holidayRequestId;
+                  return (
                     <div className="row-actions">
-                      <button
-                        type="button"
-                        className="row-action"
-                        disabled={busy}
-                        onClick={() => onDecide(row, "approved")}
-                      >
+                      <button type="button" className="row-action" disabled={busy} onClick={() => onDecide(row.original, "approved")}>
                         {busy ? "Saving…" : "Approve"}
                       </button>
                       <button
                         type="button"
                         className="row-action row-action-danger"
                         disabled={busy}
-                        onClick={() => onDecide(row, "rejected")}
+                        onClick={() => onDecide(row.original, "rejected")}
                       >
                         {busy ? "Saving…" : "Reject"}
                       </button>
                     </div>
-                  </td>
-                ) : null}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                  );
+                },
+              }),
+            ]
+          : []),
+      ]),
+    [busyId, onDecide],
+  );
+
+  return (
+    <AppDataTable
+      columns={columns}
+      data={rows}
+      searchPlaceholder="Filter requests..."
+      filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+    />
   );
 }
 
-// Shows pending, approved, or rejected as a colored label.
-function StatusBadge({ status }: { status: HolidayStatus }) {
-  if (status === "approved") return <Badge tone="success">Approved</Badge>;
-  if (status === "rejected") return <Badge tone="danger">Rejected</Badge>;
-  return <Badge tone="warning">Pending</Badge>;
+// Returns the plain status label for a holiday request.
+function statusLabel(status: HolidayStatus) {
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected";
+  return "Pending";
 }
 
 // Shows the holiday review page for the signed-in admin's company.
 export function AdminHolidaysPage() {
-  const workspace = useWorkspace();
-  const company = workspace.tenantName ?? "your company";
-
-  return (
-    <>
-      <header className="page-header">
-        <h2 className="page-title">Holiday requests</h2>
-        <p className="page-description">Review time off requested by workers at {company}.</p>
-      </header>
-      <HolidaysPanel />
-    </>
-  );
+  return <HolidaysPanel />;
 }

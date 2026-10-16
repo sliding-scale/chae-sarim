@@ -49,12 +49,13 @@ export async function syncClerkUser(
         .unique()
     : null;
   if (invite) {
-    await ctx.db.insert("memberships", {
+    const membershipId = await ctx.db.insert("memberships", {
       clerkId: args.clerkId,
       tenantId: invite.tenantId,
       role: "worker",
     });
     await ctx.db.delete(invite._id);
+    await notifyAdminsOfJoin(ctx, invite.tenantId, args.clerkId, membershipId);
     return;
   }
 
@@ -224,6 +225,130 @@ export async function requireJobSite(
     throw new ConvexError("Choose a job site in your company.");
   }
   return site;
+}
+
+const assignmentLookupLimit = 20;
+
+// Returns a job site assigned to this worker, or rejects the call.
+export async function requireAssignedJobSite(
+  ctx: QueryCtx | MutationCtx,
+  tenantId: Id<"tenants">,
+  clerkId: string,
+  jobSiteId: Id<"jobSites">,
+) {
+  const site = await requireJobSite(ctx, tenantId, jobSiteId);
+  const matches = await ctx.db
+    .query("jobSiteAssignments")
+    .withIndex("by_clerk_id_and_job_site_id", (q) =>
+      q.eq("clerkId", clerkId).eq("jobSiteId", jobSiteId),
+    )
+    .take(assignmentLookupLimit);
+  if (!matches.some((row) => row.tenantId === tenantId)) {
+    throw new ConvexError("That job site is not assigned to you.");
+  }
+  return site;
+}
+
+const assignmentPageLimit = 100;
+
+// Removes every job site assignment for one worker in a company.
+export async function deleteWorkerAssignments(
+  ctx: MutationCtx,
+  tenantId: Id<"tenants">,
+  clerkId: string,
+) {
+  const rows = await ctx.db
+    .query("jobSiteAssignments")
+    .withIndex("by_tenant_id_and_clerk_id", (q) => q.eq("tenantId", tenantId).eq("clerkId", clerkId))
+    .take(assignmentPageLimit);
+  for (const row of rows) await ctx.db.delete(row._id);
+}
+
+// Removes every worker assignment that points at a job site.
+export async function deleteSiteAssignments(ctx: MutationCtx, jobSiteId: Id<"jobSites">) {
+  const rows = await ctx.db
+    .query("jobSiteAssignments")
+    .withIndex("by_job_site_id", (q) => q.eq("jobSiteId", jobSiteId))
+    .take(assignmentPageLimit);
+  for (const row of rows) await ctx.db.delete(row._id);
+}
+
+// Trims a company name and rejects an empty or oversized one.
+export function companyName(value: string) {
+  const name = value.trim().replace(/\s+/g, " ");
+  if (!name) throw new ConvexError("Enter a company name.");
+  if (name.length > 80) throw new ConvexError("Company name must be 80 characters or fewer.");
+  return name;
+}
+
+// Trims a company address and rejects one that is too long.
+export function companyAddress(value: string) {
+  const address = value.trim();
+  if (address.length > 200) throw new ConvexError("Address must be 200 characters or fewer.");
+  return address;
+}
+
+// Trims a company phone number and rejects one that is too long.
+export function companyPhone(value: string) {
+  const phone = value.trim();
+  if (phone.length > 40) throw new ConvexError("Phone must be 40 characters or fewer.");
+  if (phone && !/^[0-9+().\-\s]+$/.test(phone)) {
+    throw new ConvexError("Enter a phone number using digits and + ( ) . -.");
+  }
+  return phone;
+}
+
+const companyImageBytes = 5 * 1024 * 1024;
+const companyImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+// Rejects an uploaded photo that is missing, too large, or not an image.
+async function requireImageFile(ctx: MutationCtx, imageStorageId: Id<"_storage">, missing: string) {
+  const meta = await ctx.db.system.get("_storage", imageStorageId);
+  if (!meta) throw new ConvexError(missing);
+  if (meta.size > companyImageBytes) throw new ConvexError("Choose a photo smaller than 5 MB.");
+  if (!meta.contentType || !companyImageTypes.has(meta.contentType)) {
+    throw new ConvexError("Upload a PNG, JPG, WEBP, or GIF.");
+  }
+}
+
+// Rejects a company photo that is missing, too large, or not an image.
+export async function requireCompanyImage(ctx: MutationCtx, imageStorageId: Id<"_storage">) {
+  await requireImageFile(ctx, imageStorageId, "Upload the company photo again.");
+}
+
+// Rejects a profile photo that is missing, too large, or not an image.
+export async function requireProfileImage(ctx: MutationCtx, imageStorageId: Id<"_storage">) {
+  await requireImageFile(ctx, imageStorageId, "Upload your photo again.");
+}
+
+// Stores or removes the signed-in person's profile photo.
+export async function setSignedInProfileImage(ctx: MutationCtx, imageStorageId: Id<"_storage"> | null) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new ConvexError("You need to sign in.");
+  if (imageStorageId) await requireProfileImage(ctx, imageStorageId);
+
+  const existing = await ctx.db
+    .query("users")
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+    .unique();
+  if (!existing) throw new ConvexError("Your account is still being created.");
+
+  const previousId = existing.imageStorageId;
+  await ctx.db.replace(existing._id, {
+    clerkId: existing.clerkId,
+    name: existing.name,
+    email: existing.email,
+    ...(imageStorageId ? { imageStorageId } : {}),
+  });
+  if (previousId && previousId !== imageStorageId) await ctx.storage.delete(previousId);
+}
+
+// Trims a company contact email, and rejects one that is not an email address.
+export function companyContactEmail(value: string) {
+  const email = value.trim().toLowerCase();
+  if (!email) return "";
+  if (!emailPattern.test(email)) throw new ConvexError("Enter a valid contact email.");
+  return email;
 }
 
 // Trims a job site name and rejects an empty or oversized one.
@@ -464,7 +589,8 @@ export async function requirePendingTimesheet(
   return timesheet;
 }
 
-type NoticeKind = "timesheet" | "invoice" | "holiday";
+type SubmissionKind = "timesheet" | "invoice" | "holiday";
+type NoticeKind = SubmissionKind | "member";
 
 type Notice = {
   kind: NoticeKind;
@@ -475,6 +601,82 @@ type Notice = {
 };
 
 const adminLimit = 20;
+
+// Returns a person's display name and profile photo.
+async function faceForClerk(ctx: QueryCtx, clerkId: string) {
+  const user = await ctx.db
+    .query("users")
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", clerkId))
+    .unique();
+  return {
+    name: user?.name.trim() || "Someone",
+    imageUrl: user?.imageStorageId ? await ctx.storage.getUrl(user.imageStorageId) : null,
+  };
+}
+
+// Turns a notification into the person, action, and photo shown in recent activity.
+export async function activityLine(ctx: QueryCtx, notification: Doc<"notifications">) {
+  const label =
+    notification.kind === "holiday" ? "holiday request" : notification.kind === "member" ? "" : notification.kind;
+
+  if (notification.kind === "member" && notification.sourceId) {
+    if (notification.title === "Worker joined") {
+      const membershipId = ctx.db.normalizeId("memberships", notification.sourceId);
+      const membership = membershipId ? await ctx.db.get(membershipId) : null;
+      if (membership) {
+        const person = await faceForClerk(ctx, membership.clerkId);
+        return { actor: person.name, action: "joined the company", imageUrl: person.imageUrl };
+      }
+    }
+    if (notification.title === "Worker invited") {
+      const inviteId = ctx.db.normalizeId("invites", notification.sourceId);
+      const invite = inviteId ? await ctx.db.get(inviteId) : null;
+      const email = invite?.email ?? notification.body.replace(/ was invited to join\.$/, "");
+      const account = email
+        ? await ctx.db
+            .query("users")
+            .withIndex("by_email", (q) => q.eq("email", email))
+            .unique()
+        : null;
+      return {
+        actor: account?.name.trim() || email || "Someone",
+        action: "was invited to join",
+        imageUrl: account?.imageStorageId ? await ctx.storage.getUrl(account.imageStorageId) : null,
+      };
+    }
+  }
+
+  if (label && notification.sourceId && notification.title.endsWith("to review")) {
+    const table =
+      notification.kind === "timesheet"
+        ? "timesheets"
+        : notification.kind === "invoice"
+          ? "workerInvoices"
+          : "holidayRequests";
+    const recordId = ctx.db.normalizeId(table, notification.sourceId);
+    const record = recordId ? await ctx.db.get(recordId) : null;
+    if (record) {
+      const person = await faceForClerk(ctx, record.clerkId);
+      return { actor: person.name, action: `submitted a ${label} for review`, imageUrl: person.imageUrl };
+    }
+  }
+
+  if (label && (notification.title.endsWith("approved") || notification.title.endsWith("rejected"))) {
+    const status = notification.title.endsWith("approved") ? "approved" : "rejected";
+    const admins = await ctx.db
+      .query("memberships")
+      .withIndex("by_tenant_id_and_role", (q) => q.eq("tenantId", notification.tenantId).eq("role", "admin"))
+      .take(2);
+    const person = admins.length === 1 ? await faceForClerk(ctx, admins[0].clerkId) : null;
+    return {
+      actor: person?.name ?? "An administrator",
+      action: `${status} your ${label}`,
+      imageUrl: person?.imageUrl ?? null,
+    };
+  }
+
+  return { actor: "Update", action: notification.body, imageUrl: null };
+}
 
 // Returns the signed-in person's membership, or rejects the call.
 export async function requireMembership(ctx: QueryCtx | MutationCtx): Promise<Doc<"memberships">> {
@@ -495,7 +697,7 @@ export async function notifyAdminsOfSubmission(
   ctx: MutationCtx,
   tenantId: Id<"tenants">,
   clerkId: string,
-  kind: NoticeKind,
+  kind: SubmissionKind,
   sourceId: string,
 ) {
   const worker = await workerLabel(ctx, clerkId);
@@ -522,7 +724,7 @@ export async function notifyWorkerOfDecision(
   ctx: MutationCtx,
   tenantId: Id<"tenants">,
   clerkId: string,
-  kind: NoticeKind,
+  kind: SubmissionKind,
   status: "approved" | "rejected",
   reason = "",
 ) {
@@ -543,13 +745,63 @@ export async function notifyWorkerOfDecision(
   });
 }
 
+// Tells every admin that a worker was invited.
+export async function notifyAdminsOfInvite(
+  ctx: MutationCtx,
+  tenantId: Id<"tenants">,
+  email: string,
+  sourceId: string,
+  createdAt?: number,
+) {
+  await notifyAdmins(
+    ctx,
+    tenantId,
+    {
+      kind: "member",
+      title: "Worker invited",
+      body: `${email} was invited to join.`,
+      href: "/dashboard/admin/workers",
+      sourceId,
+    },
+    createdAt,
+  );
+}
+
+// Tells every admin that an invited worker joined the company.
+export async function notifyAdminsOfJoin(
+  ctx: MutationCtx,
+  tenantId: Id<"tenants">,
+  clerkId: string,
+  sourceId: string,
+  createdAt?: number,
+) {
+  const worker = await workerLabel(ctx, clerkId);
+  const who = worker.name !== "Worker" ? worker.name : worker.email || "A worker";
+  await notifyAdmins(
+    ctx,
+    tenantId,
+    {
+      kind: "member",
+      title: "Worker joined",
+      body: `${who} joined the company.`,
+      href: "/dashboard/admin/workers",
+      sourceId,
+    },
+    createdAt,
+  );
+}
+
 // Writes one notification for every admin in the company.
-async function notifyAdmins(ctx: MutationCtx, tenantId: Id<"tenants">, notice: Notice) {
+async function notifyAdmins(
+  ctx: MutationCtx,
+  tenantId: Id<"tenants">,
+  notice: Notice,
+  createdAt = Date.now(),
+) {
   const admins = await ctx.db
     .query("memberships")
     .withIndex("by_tenant_id_and_role", (q) => q.eq("tenantId", tenantId).eq("role", "admin"))
     .take(adminLimit);
-  const createdAt = Date.now();
   for (const admin of admins) {
     const { sourceId, ...rest } = notice;
     await ctx.db.insert("notifications", {
@@ -561,6 +813,87 @@ async function notifyAdmins(ctx: MutationCtx, tenantId: Id<"tenants">, notice: N
       createdAt,
     });
   }
+}
+
+// Returns the Clerk secret configured for this deployment.
+function clerkSecret() {
+  const key = process.env.CLERK_SECRET_KEY;
+  if (!key) throw new ConvexError("Worker sign-in is not configured yet.");
+  return key;
+}
+
+// Reads the first Clerk error from a failed response.
+async function clerkError(response: Response) {
+  const body = (await response.json().catch(() => null)) as {
+    errors?: { code?: string; long_message?: string; message?: string }[];
+  } | null;
+  const error = body?.errors?.[0];
+  return { code: error?.code ?? "", message: error?.long_message || error?.message || "" };
+}
+
+// Keeps a browser origin and points it at the sign-up page.
+export function signUpLink(origin: string) {
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    throw new ConvexError("Could not build the invite link.");
+  }
+  if ((url.protocol !== "https:" && url.protocol !== "http:") || url.username || url.password) {
+    throw new ConvexError("Could not build the invite link.");
+  }
+  return `${url.origin}/sign-up`;
+}
+
+// Asks Clerk to email an invitation the worker can accept.
+export async function createClerkInvitation(email: string, redirectUrl: string) {
+  const response = await fetch("https://api.clerk.com/v1/invitations", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${clerkSecret()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email_address: email,
+      redirect_url: redirectUrl,
+      notify: true,
+      ignore_existing: false,
+    }),
+  });
+  if (response.ok) {
+    const body = (await response.json()) as { id?: string };
+    if (!body.id) throw new ConvexError("Could not email that worker.");
+    return body.id;
+  }
+  const error = await clerkError(response);
+  if (
+    error.code === "form_identifier_exists" ||
+    error.code === "duplicate_record" ||
+    error.code === "invitation_already_pending"
+  ) {
+    return null;
+  }
+  throw new ConvexError(error.message || "Could not email that worker.");
+}
+
+// Revokes a Clerk invitation so its link stops working.
+export async function revokeClerkInvitation(invitationId: string) {
+  const response = await fetch(
+    `https://api.clerk.com/v1/invitations/${encodeURIComponent(invitationId)}/revoke`,
+    { method: "POST", headers: { Authorization: `Bearer ${clerkSecret()}` } },
+  );
+  if (response.ok || response.status === 404) return;
+  throw new ConvexError("Could not cancel that invite.");
+}
+
+// Deletes a Clerk user created by an older invite.
+export async function deleteClerkUser(clerkId: string) {
+  const response = await fetch(`https://api.clerk.com/v1/users/${encodeURIComponent(clerkId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${clerkSecret()}` },
+  });
+  if (response.ok || response.status === 404) return;
+  throw new ConvexError("Could not cancel that invite.");
 }
 
 // Writes one notification for a specific person in the company.

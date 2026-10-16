@@ -56,7 +56,7 @@ export function DashboardRedirect() {
     <div className="setup-screen">
       <section className="saas-card setup-card">
         <Logo />
-        <h1 className="page-title" style={{ marginTop: 20, fontSize: "1.6rem" }}>
+        <h1 className="page-title setup-title">
           {title}
         </h1>
         <p>{body}</p>

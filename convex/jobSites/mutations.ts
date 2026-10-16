@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { mutation } from "../_generated/server";
-import { assertUniqueName, assertUnused, requireAdmin, siteAddress, siteName } from "../lib";
+import { assertUniqueName, assertUnused, deleteSiteAssignments, requireAdmin, siteAddress, siteName } from "../lib";
 
 // Adds a job site to the signed-in admin's company.
 export const createJobSite = mutation({
@@ -53,6 +53,7 @@ export const removeJobSite = mutation({
     }
 
     await assertUnused(ctx, site._id);
+    await deleteSiteAssignments(ctx, site._id);
     await ctx.db.delete(site._id);
     return null;
   },

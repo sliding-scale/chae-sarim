@@ -3,7 +3,9 @@
 import { AuthLink } from "@/components/auth/AuthLink";
 import { Logo } from "@/components/brand/Logo";
 import { UserAvatar } from "@/components/users/UserAvatar";
+import { api } from "../../../convex/_generated/api";
 import { SignOutButton, useAuth, useUser } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
 import { LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -19,6 +21,7 @@ const links = [
 export function MarketingNavbar() {
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
+  const current = useQuery(api.users.queries.getCurrentUser);
   const [open, setOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
@@ -62,7 +65,7 @@ export function MarketingNavbar() {
                 aria-expanded={accountOpen}
                 onClick={() => setAccountOpen((value) => !value)}
               >
-                <UserAvatar name={name} imageUrl={user?.hasImage ? user.imageUrl : null} />
+                <UserAvatar name={name} imageUrl={current?.imageUrl || (user?.hasImage ? user.imageUrl : null)} />
               </button>
               {accountOpen ? (
                 <div className="menu-panel" role="menu">

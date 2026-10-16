@@ -1,13 +1,15 @@
 "use client";
 
+import { AppDataTable, DataTableColumnHeader, TableFigure, TableMuted, TablePerson, TableStatus, emailHandle } from "@/components/lists/AppDataTable";
+import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { Badge } from "@/components/ui/badge";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 type InvoiceStatus = "pending" | "approved" | "rejected";
 
@@ -59,6 +61,7 @@ export function InvoicesPanel() {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<Id<"workerInvoices"> | null>(null);
   const confirm = useConfirm();
+  const rows = invoices ? [...invoices.pending, ...invoices.reviewed] : undefined;
 
   // Approves or rejects one pending invoice after the admin confirms.
   async function onDecide(row: InvoiceRow, status: "approved" | "rejected") {
@@ -89,33 +92,23 @@ export function InvoicesPanel() {
   return (
     <>
       <section className="saas-card invite-panel">
-        <h2 className="panel-title">Waiting for review</h2>
+        <h2 className="panel-title">Invoices</h2>
         <p className="panel-copy">
-          Invoices workers at {company} have uploaded. Approving or rejecting an invoice records that decision.
+          Invoices workers at {company} have uploaded. Approving or rejecting a pending invoice records that
+          decision.
         </p>
         {error ? <p className="field-error">{error}</p> : null}
-        {invoices === undefined ? (
+        {rows === undefined ? (
           <p className="invite-note">Loading invoices…</p>
-        ) : invoices.pending.length === 0 ? (
-          <div className="empty-panel">
-            <h3 className="panel-title">Nothing to review</h3>
-            <p className="panel-copy">Invoices waiting for approval will show up here.</p>
-          </div>
         ) : (
-          <InvoiceTable rows={invoices.pending} busyId={busyId} onDecide={onDecide} />
+          <InvoiceTable rows={rows} busyId={busyId} onDecide={onDecide} />
         )}
       </section>
-
-      {invoices && invoices.reviewed.length > 0 ? (
-        <section className="saas-card stack-card">
-          <h2 className="panel-title">Reviewed</h2>
-          <p className="panel-copy">Invoices already approved or rejected for {company}.</p>
-          <InvoiceTable rows={invoices.reviewed} busyId={null} />
-        </section>
-      ) : null}
     </>
   );
 }
+
+const invoiceColumns = createColumnHelper<DataTableFeatures, InvoiceRow>();
 
 // Renders one invoice table, with approve and reject actions when a handler is provided.
 function InvoiceTable({
@@ -127,77 +120,103 @@ function InvoiceTable({
   busyId: Id<"workerInvoices"> | null;
   onDecide?: (row: InvoiceRow, status: "approved" | "rejected") => void;
 }) {
-  return (
-    <div className="table-scroll">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th scope="col">Worker</th>
-            <th scope="col">Job site</th>
-            <th scope="col">Month</th>
-            <th scope="col">Amount</th>
-            <th scope="col">Files</th>
-            <th scope="col">Status</th>
-            {onDecide ? (
-              <th scope="col">
-                <span className="sr-only">Actions</span>
-              </th>
-            ) : null}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const busy = busyId === row.invoiceId;
-            return (
-              <tr key={row.invoiceId}>
-                <td>
-                  <strong>{row.workerName}</strong>
-                  <span className="hours-breakdown">{row.workerEmail || "No email on file"}</span>
-                </td>
-                <td>{row.jobSiteName}</td>
-                <td>{formatMonth(row.invoiceMonth)}</td>
-                <td>{formatAmount(row.amount)}</td>
-                <td>
-                  <InvoiceFiles files={row.files} />
-                </td>
-                <td>
-                  <StatusBadge status={row.status} />
-                  {row.rejectionReason ? <span className="hours-breakdown">{row.rejectionReason}</span> : null}
-                </td>
-                {onDecide ? (
-                  <td>
+  const columns = useMemo(
+    () =>
+      invoiceColumns.columns([
+        invoiceColumns.accessor((row) => `${row.workerName} ${row.workerEmail}`, {
+          id: "worker",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Worker" />,
+          cell: ({ row }) => (
+            <TablePerson
+              name={row.original.workerName}
+              detail={row.original.workerEmail ? emailHandle(row.original.workerEmail) : "No email on file"}
+            />
+          ),
+          sortFn: "text",
+        }),
+        invoiceColumns.accessor("jobSiteName", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
+          cell: ({ row }) => <TableMuted>{row.original.jobSiteName}</TableMuted>,
+          sortFn: "text",
+        }),
+        invoiceColumns.accessor("invoiceMonth", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Month" />,
+          cell: ({ row }) => <TableMuted>{formatMonth(row.original.invoiceMonth)}</TableMuted>,
+          sortFn: "alphanumeric",
+        }),
+        invoiceColumns.accessor("amount", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" align="end" />,
+          cell: ({ row }) =>
+            row.original.amount === null ? (
+              <TableMuted>No amount</TableMuted>
+            ) : (
+              <TableFigure value={formatAmount(row.original.amount)} negative={row.original.amount < 0} />
+            ),
+          sortFn: "alphanumeric",
+        }),
+        invoiceColumns.accessor((row) => row.files.map((file) => file.fileName).join(" "), {
+          id: "files",
+          header: "Files",
+          cell: ({ row }) => <InvoiceFiles files={row.original.files} />,
+          enableSorting: false,
+        }),
+        invoiceColumns.accessor((row) => [row.status, row.rejectionReason].filter(Boolean).join(" "), {
+          id: "status",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+          cell: ({ row }) => (
+            <TableStatus
+              label={statusLabel(row.original.status)}
+              detail={row.original.rejectionReason}
+              tone={row.original.status === "rejected" ? "danger" : "default"}
+            />
+          ),
+          sortFn: "text",
+        }),
+        ...(onDecide
+          ? [
+              invoiceColumns.display({
+                id: "actions",
+                enableSorting: false,
+                enableGlobalFilter: false,
+                cell: ({ row }) => {
+                  if (row.original.status !== "pending") return null;
+                  const busy = busyId === row.original.invoiceId;
+                  return (
                     <div className="row-actions">
-                      <button
-                        type="button"
-                        className="row-action"
-                        disabled={busy}
-                        onClick={() => onDecide(row, "approved")}
-                      >
+                      <button type="button" className="row-action" disabled={busy} onClick={() => onDecide(row.original, "approved")}>
                         {busy ? "Saving…" : "Approve"}
                       </button>
                       <button
                         type="button"
                         className="row-action row-action-danger"
                         disabled={busy}
-                        onClick={() => onDecide(row, "rejected")}
+                        onClick={() => onDecide(row.original, "rejected")}
                       >
                         {busy ? "Saving…" : "Reject"}
                       </button>
                     </div>
-                  </td>
-                ) : null}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                  );
+                },
+              }),
+            ]
+          : []),
+      ]),
+    [busyId, onDecide],
+  );
+
+  return (
+    <AppDataTable
+      columns={columns}
+      data={rows}
+      searchPlaceholder="Filter invoices..."
+      filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+    />
   );
 }
 
 // Lists the files attached to an invoice, with a link when the file can be opened.
 function InvoiceFiles({ files }: { files: InvoiceFile[] }) {
-  if (files.length === 0) return <span>No file</span>;
+  if (files.length === 0) return <TableMuted>No file</TableMuted>;
   return (
     <span className="file-links">
       {files.map((file, index) =>
@@ -213,25 +232,14 @@ function InvoiceFiles({ files }: { files: InvoiceFile[] }) {
   );
 }
 
-// Shows pending, approved, or rejected as a colored label.
-function StatusBadge({ status }: { status: InvoiceStatus }) {
-  if (status === "approved") return <Badge tone="success">Approved</Badge>;
-  if (status === "rejected") return <Badge tone="danger">Rejected</Badge>;
-  return <Badge tone="warning">Pending</Badge>;
+// Returns the plain status label for an invoice.
+function statusLabel(status: InvoiceStatus) {
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected";
+  return "Pending";
 }
 
 // Shows the invoice review page for the signed-in admin's company.
 export function AdminInvoicesPage() {
-  const workspace = useWorkspace();
-  const company = workspace.tenantName ?? "your company";
-
-  return (
-    <>
-      <header className="page-header">
-        <h2 className="page-title">Invoices</h2>
-        <p className="page-description">Review invoices uploaded by workers at {company}.</p>
-      </header>
-      <InvoicesPanel />
-    </>
-  );
+  return <InvoicesPanel />;
 }

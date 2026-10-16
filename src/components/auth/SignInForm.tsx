@@ -132,7 +132,7 @@ export function SignInForm() {
     event.preventDefault();
     const next: { code?: string; password?: string } = {};
     if (code.trim().length < 4) next.code = "Enter the code from your email.";
-    if (nextPassword.length < 8) next.password = "Use at least 8 characters.";
+    if (!nextPassword) next.password = "Enter a password.";
     setFieldErrors(next);
     setLocalError(null);
     setNotice(null);

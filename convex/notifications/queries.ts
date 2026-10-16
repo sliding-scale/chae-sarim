@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { query } from "../_generated/server";
-import { requireMembership } from "../lib";
+import { activityLine, requireMembership } from "../lib";
 
 const notificationLimit = 30;
 
@@ -10,8 +10,9 @@ export const listMine = query({
   returns: v.array(
     v.object({
       notificationId: v.id("notifications"),
-      title: v.string(),
-      body: v.string(),
+      actor: v.string(),
+      action: v.string(),
+      imageUrl: v.union(v.string(), v.null()),
       href: v.string(),
       read: v.boolean(),
       createdAt: v.number(),
@@ -25,15 +26,20 @@ export const listMine = query({
       .order("desc")
       .take(notificationLimit);
 
-    return notifications
-      .filter((notification) => notification.tenantId === membership.tenantId)
-      .map((notification) => ({
-        notificationId: notification._id,
-        title: notification.title,
-        body: notification.body,
-        href: notification.href,
-        read: notification.read,
-        createdAt: notification.createdAt,
-      }));
+    const rows = notifications.filter((notification) => notification.tenantId === membership.tenantId);
+    return await Promise.all(
+      rows.map(async (notification) => {
+        const line = await activityLine(ctx, notification);
+        return {
+          notificationId: notification._id,
+          actor: line.actor,
+          action: line.action,
+          imageUrl: line.imageUrl,
+          href: notification.href,
+          read: notification.read,
+          createdAt: notification.createdAt,
+        };
+      }),
+    );
   },
 });

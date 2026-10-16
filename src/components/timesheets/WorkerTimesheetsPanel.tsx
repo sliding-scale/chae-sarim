@@ -1,11 +1,13 @@
 "use client";
 
+import { AppDataTable, DataTableColumnHeader, TableFigure, TableMuted, TablePerson, TableStatus } from "@/components/lists/AppDataTable";
+import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { RequiredMark } from "@/components/ui/RequiredMark";
-import { Badge } from "@/components/ui/badge";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
 import { FormEvent, useMemo, useState } from "react";
@@ -154,8 +156,8 @@ export function WorkerTimesheetsPanel() {
           <p className="invite-note">Loading job sites…</p>
         ) : sites.length === 0 ? (
           <div className="empty-panel">
-            <h3 className="panel-title">No job sites yet</h3>
-            <p className="panel-copy">Ask an admin to add a job site before you submit hours.</p>
+            <h3 className="panel-title">No job sites assigned</h3>
+            <p className="panel-copy">Ask an administrator to assign a job site before you submit hours.</p>
           </div>
         ) : (
           <TimesheetForm
@@ -177,11 +179,6 @@ export function WorkerTimesheetsPanel() {
         <p className="panel-copy">Weeks you have submitted for {company}.</p>
         {timesheets === undefined ? (
           <p className="invite-note">Loading timesheets…</p>
-        ) : timesheets.length === 0 ? (
-          <div className="empty-panel">
-            <h3 className="panel-title">No timesheets yet</h3>
-            <p className="panel-copy">A week you submit will show up here.</p>
-          </div>
         ) : (
           <TimesheetTable rows={timesheets} />
         )}
@@ -371,54 +368,73 @@ function TimesheetForm({
   );
 }
 
+const workerTimesheetColumns = createColumnHelper<DataTableFeatures, TimesheetRow>();
+
 // Renders the worker's submitted weeks.
 function TimesheetTable({ rows }: { rows: TimesheetRow[] }) {
+  const columns = useMemo(
+    () =>
+      workerTimesheetColumns.columns([
+        workerTimesheetColumns.accessor("jobSiteName", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
+          cell: ({ row }) => <TablePerson name={row.original.jobSiteName} />,
+          sortFn: "text",
+        }),
+        workerTimesheetColumns.accessor("weekStart", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Week" />,
+          cell: ({ row }) => <TableMuted>{`${formatDay(row.original.weekStart)} – ${formatDay(row.original.weekEnd)}`}</TableMuted>,
+          sortFn: "alphanumeric",
+        }),
+        workerTimesheetColumns.accessor("totalHours", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Hours" align="end" />,
+          cell: ({ row }) => (
+            <div className="table-figure-stack">
+              <TableFigure value={`${formatHours(row.original.totalHours)}h`} />
+              <span className="table-person-detail">
+                {dayLabels.map(([key, label]) => `${label.slice(0, 3)} ${formatHours(row.original.hours[key])}`).join(" · ")}
+              </span>
+            </div>
+          ),
+          sortFn: "alphanumeric",
+        }),
+        workerTimesheetColumns.accessor((row) => row.comments ?? "", {
+          id: "comments",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Comments" />,
+          cell: ({ row }) => <TableMuted>{row.original.comments || "No comments"}</TableMuted>,
+          sortFn: "text",
+        }),
+        workerTimesheetColumns.accessor((row) => [row.status, row.rejectionReason].filter(Boolean).join(" "), {
+          id: "status",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+          cell: ({ row }) => (
+            <TableStatus
+              label={statusLabel(row.original.status)}
+              detail={row.original.rejectionReason}
+              tone={row.original.status === "rejected" ? "danger" : "default"}
+            />
+          ),
+          sortFn: "text",
+        }),
+      ]),
+    [],
+  );
+
   return (
-    <div className="table-scroll">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th scope="col">Job site</th>
-            <th scope="col">Week</th>
-            <th scope="col">Hours</th>
-            <th scope="col">Comments</th>
-            <th scope="col">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.timesheetId}>
-              <td>{row.jobSiteName}</td>
-              <td>
-                {formatDay(row.weekStart)} – {formatDay(row.weekEnd)}
-              </td>
-              <td>
-                <strong>{formatHours(row.totalHours)}h</strong>
-                <span className="hours-breakdown">
-                  {dayLabels
-                    .map(([key, label]) => `${label.slice(0, 3)} ${formatHours(row.hours[key])}`)
-                    .join(" · ")}
-                </span>
-              </td>
-              <td>{row.comments || "No comments"}</td>
-              <td>
-                <StatusBadge status={row.status} />
-                {row.rejectionReason ? <span className="hours-breakdown">{row.rejectionReason}</span> : null}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <AppDataTable
+      columns={columns}
+      data={rows}
+      searchPlaceholder="Filter timesheets..."
+      filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+    />
   );
 }
 
-// Shows draft, pending, approved, or rejected as a colored label.
-function StatusBadge({ status }: { status: TimesheetStatus }) {
-  if (status === "approved") return <Badge tone="success">Approved</Badge>;
-  if (status === "rejected") return <Badge tone="danger">Rejected</Badge>;
-  if (status === "draft") return <Badge tone="neutral">Draft</Badge>;
-  return <Badge tone="warning">Pending</Badge>;
+// Returns the plain status label for a timesheet.
+function statusLabel(status: TimesheetStatus) {
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected";
+  if (status === "draft") return "Draft";
+  return "Pending";
 }
 
 // Shows the timesheet page for the signed-in worker.
@@ -429,7 +445,6 @@ export function WorkerTimesheetsPage() {
   return (
     <>
       <header className="page-header">
-        <h2 className="page-title">Timesheets</h2>
         <p className="page-description">Submit weekly hours for a job site at {company}.</p>
       </header>
       <WorkerTimesheetsPanel />
