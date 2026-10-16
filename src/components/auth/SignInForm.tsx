@@ -36,7 +36,9 @@ export function SignInForm() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; code?: string }>({});
+  const [googleBusy, setGoogleBusy] = useState(false);
   const busy = fetchStatus === "fetching";
+  const signingIn = busy && !googleBusy;
 
   // Opens the dashboard when this browser already has a Clerk session.
   useEffect(() => {
@@ -96,12 +98,16 @@ export function SignInForm() {
   // Starts Google sign-in.
   async function onGoogle() {
     setLocalError(null);
+    setGoogleBusy(true);
     const result = await signIn.sso({
       strategy: "oauth_google",
       redirectUrl: "/dashboard",
       redirectCallbackUrl: "/sign-in/sso-callback",
     });
-    if (result.error) setLocalError(result.error.longMessage || result.error.message);
+    if (result.error) {
+      setGoogleBusy(false);
+      setLocalError(result.error.longMessage || result.error.message);
+    }
   }
 
   // Emails a password reset code to the address in the form.
@@ -239,9 +245,9 @@ export function SignInForm() {
               </button>
             }
           />
-          <button className="btn-primary btn-block" type="submit" disabled={busy}>
-            {busy ? <span className="spinner" aria-hidden="true" /> : null}
-            {busy ? "Signing in..." : "Sign in"}
+          <button className="btn-primary btn-block" type="submit" disabled={busy || googleBusy}>
+            {signingIn ? <span className="spinner" aria-hidden="true" /> : null}
+            {signingIn ? "Signing in..." : "Sign in"}
           </button>
         </form>
       ) : null}
@@ -329,9 +335,9 @@ export function SignInForm() {
       {step === "credentials" ? (
         <>
           <div className="auth-divider">OR</div>
-          <button className="btn-secondary btn-block" type="button" onClick={onGoogle} disabled={busy}>
-            <GoogleLogo />
-            Continue with Google
+          <button className="btn-secondary btn-block" type="button" onClick={onGoogle} disabled={busy || googleBusy}>
+            {googleBusy ? <span className="spinner" aria-hidden="true" /> : <GoogleLogo />}
+            {googleBusy ? "Continuing..." : "Continue with Google"}
           </button>
           <p className="auth-switch">
             Don&apos;t have an account? <Link href="/sign-up">Create one</Link>

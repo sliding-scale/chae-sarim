@@ -1860,6 +1860,11 @@ a.activity-row:hover {
   animation: spin 0.7s linear infinite;
 }
 
+.btn-secondary .spinner {
+  border-color: color-mix(in srgb, currentColor 35%, transparent);
+  border-top-color: currentColor;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

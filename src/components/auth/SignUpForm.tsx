@@ -23,8 +23,10 @@ export function SignUpForm() {
   const [notice, setNotice] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [accepted, setAccepted] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const finishing = useRef(false);
   const busy = fetchStatus === "fetching";
+  const creating = busy && !googleBusy;
 
   // Sends the browser to the dashboard after Clerk finishes sign-up.
   function goDashboard() {
@@ -155,12 +157,16 @@ export function SignUpForm() {
   // Starts Google sign-up.
   async function onGoogle() {
     setLocalError(null);
+    setGoogleBusy(true);
     const result = await signUp.sso({
       strategy: "oauth_google",
       redirectUrl: "/dashboard",
       redirectCallbackUrl: "/sign-up/sso-callback",
     });
-    if (result.error) setLocalError(result.error.longMessage || result.error.message);
+    if (result.error) {
+      setGoogleBusy(false);
+      setLocalError(result.error.longMessage || result.error.message);
+    }
   }
 
   const alert = localError || errors.global?.[0]?.longMessage || errors.global?.[0]?.message || null;
@@ -277,9 +283,9 @@ export function SignUpForm() {
             error={fieldErrors.confirm}
             onChange={(event) => setConfirm(event.target.value)}
           />
-          <button className="btn-primary btn-block" type="submit" disabled={busy}>
-            {busy ? <span className="spinner" aria-hidden="true" /> : null}
-            {busy ? "Creating account..." : "Create account"}
+          <button className="btn-primary btn-block" type="submit" disabled={busy || googleBusy}>
+            {creating ? <span className="spinner" aria-hidden="true" /> : null}
+            {creating ? "Creating account..." : "Create account"}
           </button>
           <p className="terms-note">
             By creating an account, you agree to our <Link href="/terms">Terms</Link> and{" "}
@@ -290,9 +296,9 @@ export function SignUpForm() {
       {verify ? null : (
         <>
           <div className="auth-divider">OR</div>
-          <button className="btn-secondary btn-block" type="button" onClick={onGoogle} disabled={busy}>
-            <GoogleLogo />
-            Continue with Google
+          <button className="btn-secondary btn-block" type="button" onClick={onGoogle} disabled={busy || googleBusy}>
+            {googleBusy ? <span className="spinner" aria-hidden="true" /> : <GoogleLogo />}
+            {googleBusy ? "Continuing..." : "Continue with Google"}
           </button>
         </>
       )}
