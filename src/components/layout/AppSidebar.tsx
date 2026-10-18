@@ -1,11 +1,12 @@
 "use client";
 
+import { ChaeMark } from "@/components/brand/ChaeMark";
 import { CompanyMark } from "@/components/brand/CompanyMark";
-import { Logo } from "@/components/brand/Logo";
+import ThemeSwitch from "@/components/ui/theme-switch";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { homeFor, navigationFor, type AppRole } from "@/lib/navigation";
 import { SignOutButton, useUser } from "@clerk/nextjs";
-import { LogOut, User } from "lucide-react";
+import { Building2, ChevronRight, LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -55,13 +56,16 @@ export function AppSidebar({
 
   return (
     <aside className={open ? "app-sidebar is-open" : "app-sidebar"}>
-      <div className="sidebar-logo">
-        <Logo href={home} />
+      <div className="sidebar-brand">
+        <Link href={home} className="sidebar-brand-name" aria-label="Chae home">
+          <ChaeMark className="sidebar-brand-mark" />
+          <span>Chae</span>
+        </Link>
       </div>
       {tenantName ? (
         <div className="sidebar-workspace">
           <span className="sidebar-workspace-mark" aria-hidden="true">
-            <CompanyMark imageUrl={tenantImageUrl} size={14} />
+            {tenantImageUrl ? <CompanyMark imageUrl={tenantImageUrl} size={22} /> : <Building2 size={22} />}
           </span>
           <span className="sidebar-workspace-copy">
             <span>Workspace</span>
@@ -86,7 +90,7 @@ export function AppSidebar({
                   aria-current={active ? "page" : undefined}
                   onClick={onNavigate}
                 >
-                  <Icon size={18} aria-hidden="true" />
+                  <Icon size={21} aria-hidden="true" />
                   <span>{item.label}</span>
                 </Link>
               );
@@ -95,6 +99,9 @@ export function AppSidebar({
         ))}
       </nav>
       <div className="sidebar-footer" ref={accountRef}>
+        <div className="sidebar-theme">
+          <ThemeSwitch />
+        </div>
         <button
           type="button"
           className="sidebar-account-button"
@@ -107,6 +114,7 @@ export function AppSidebar({
             <strong>{name}</strong>
             <span>{role === "admin" ? "Administrator" : "Worker"}</span>
           </span>
+          <ChevronRight className="sidebar-footer-chevron" size={18} aria-hidden="true" />
         </button>
         {accountOpen ? (
           <div className="sidebar-menu" role="menu">

@@ -1,14 +1,23 @@
 "use client";
 
-import { AppDataTable, DataTableColumnHeader, TableMuted, TablePerson, TableStatus, emailHandle } from "@/components/lists/AppDataTable";
+import { ReviewBoard } from "@/components/dashboard/ReviewBoard";
+import {
+  AppDataTable,
+  DataTableColumnHeader,
+  TableIconText,
+  TableLongText,
+  TablePerson,
+  TableStatus,
+  formatDateRange,
+} from "@/components/lists/AppDataTable";
 import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
+import { CalendarDays, MapPin } from "lucide-react";
 import { useMemo, useState } from "react";
 
 type HolidayStatus = "pending" | "approved" | "rejected";
@@ -31,21 +40,8 @@ function errorText(error: unknown, fallback: string) {
   return fallback;
 }
 
-// Formats a YYYY-MM-DD date without shifting it across time zones.
-function formatDay(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return value;
-  return new Date(year, month - 1, day).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 // Lets an admin review submitted holiday requests and approve or reject the ones still pending.
 export function HolidaysPanel() {
-  const workspace = useWorkspace();
-  const company = workspace.tenantName ?? "this company";
   const holidays = useQuery(api.holidays.queries.listHolidays);
   const decideHoliday = useMutation(api.holidays.mutations.decideHoliday);
   const [error, setError] = useState("");
@@ -80,21 +76,13 @@ export function HolidaysPanel() {
   }
 
   return (
-    <>
-      <section className="saas-card invite-panel">
-        <h2 className="panel-title">Holiday requests</h2>
-        <p className="panel-copy">
-          Time off workers at {company} have requested. Approving or rejecting a pending request records that
-          decision.
-        </p>
-        {error ? <p className="field-error">{error}</p> : null}
-        {rows === undefined ? (
-          <p className="invite-note">Loading holiday requests…</p>
-        ) : (
-          <HolidayTable rows={rows} busyId={busyId} onDecide={onDecide} />
-        )}
-      </section>
-    </>
+    <ReviewBoard title="Submitted Holidays" noun="holidays" rows={rows} error={error}>
+      {rows === undefined ? (
+        <p className="invite-note">Loading holiday requests…</p>
+      ) : (
+        <HolidayTable rows={rows} busyId={busyId} onDecide={onDecide} />
+      )}
+    </ReviewBoard>
   );
 }
 
@@ -116,45 +104,47 @@ function HolidayTable({
         holidayColumns.accessor((row) => `${row.workerName} ${row.workerEmail}`, {
           id: "worker",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Worker" />,
-          cell: ({ row }) => (
-            <TablePerson
-              name={row.original.workerName}
-              detail={row.original.workerEmail ? emailHandle(row.original.workerEmail) : "No email on file"}
-            />
-          ),
+          cell: ({ row }) => <TablePerson name={row.original.workerName} />,
           sortFn: "text",
         }),
         holidayColumns.accessor("jobSiteName", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
-          cell: ({ row }) => <TableMuted>{row.original.jobSiteName}</TableMuted>,
+          cell: ({ row }) => <TableIconText icon={MapPin}>{row.original.jobSiteName}</TableIconText>,
           sortFn: "text",
         }),
         holidayColumns.accessor("startDate", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Dates" />,
-          cell: ({ row }) => <TableMuted>{`${formatDay(row.original.startDate)} – ${formatDay(row.original.endDate)}`}</TableMuted>,
+          cell: ({ row }) => (
+            <TableIconText icon={CalendarDays}>{formatDateRange(row.original.startDate, row.original.endDate)}</TableIconText>
+          ),
           sortFn: "alphanumeric",
         }),
         holidayColumns.accessor("reason", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Reason" />,
-          cell: ({ row }) => <TableMuted>{row.original.reason}</TableMuted>,
+          cell: ({ row }) => <TableLongText text={row.original.reason} title="Reason" />,
           sortFn: "text",
         }),
-        holidayColumns.accessor((row) => [row.status, row.rejectionReason].filter(Boolean).join(" "), {
-          id: "status",
+        holidayColumns.accessor("status", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
           cell: ({ row }) => (
             <TableStatus
               label={statusLabel(row.original.status)}
-              detail={row.original.rejectionReason}
-              tone={row.original.status === "rejected" ? "danger" : "default"}
+              tone={row.original.status === "approved" ? "success" : row.original.status === "rejected" ? "danger" : "warning"}
             />
           ),
+          sortFn: "text",
+        }),
+        holidayColumns.accessor((row) => row.rejectionReason ?? "", {
+          id: "rejectionReason",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Rejection reason" />,
+          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" />,
           sortFn: "text",
         }),
         ...(onDecide
           ? [
               holidayColumns.display({
                 id: "actions",
+                header: "Actions",
                 enableSorting: false,
                 enableGlobalFilter: false,
                 cell: ({ row }) => {
@@ -187,8 +177,12 @@ function HolidayTable({
     <AppDataTable
       columns={columns}
       data={rows}
-      searchPlaceholder="Filter requests..."
+      searchPlaceholder="Search by worker, job site or reason..."
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+      empty={{
+        title: "No holiday requests yet",
+        description: "When workers request time off, they will appear here for your review.",
+      }}
     />
   );
 }

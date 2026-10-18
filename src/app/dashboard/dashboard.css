@@ -37,6 +37,29 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --animate-glow-slow: glow 2.5s ease-in-out infinite;
+  --animate-bounce-drop: bounceDrop 0.8s ease;
+
+  @keyframes glow {
+    0% {
+      box-shadow: 0 0 8px rgba(25, 185, 75, 0.6);
+    }
+    50% {
+      box-shadow: 0 0 16px rgba(25, 185, 75, 0.8);
+    }
+  }
+
+  @keyframes bounceDrop {
+    0% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
 }
 
 .dashboard-app {
@@ -55,8 +78,8 @@
   --accent: #e7f6eb;
   --accent-foreground: #14502c;
   --destructive: #d45d62;
-  --border: #e2e9e3;
-  --input: #e2e9e3;
+  --border: #000000;
+  --input: #000000;
   --ring: #19b94b;
   --sidebar: #f4f7f4;
   --sidebar-foreground: #26352b;
@@ -64,7 +87,7 @@
   --sidebar-primary-foreground: #f6fbf7;
   --sidebar-accent: #e4eee6;
   --sidebar-accent-foreground: #14502c;
-  --sidebar-border: #e2e9e3;
+  --sidebar-border: #000000;
   --sidebar-ring: #19b94b;
   --chart-1: #19b94b;
   --chart-2: #17723a;
@@ -74,17 +97,17 @@
 }
 
 html[data-theme="dark"] .dashboard-app {
-  --background: #1c2128;
+  --background: #000000;
   --foreground: #f4f7f4;
-  --card: #242b33;
+  --card: #000000;
   --card-foreground: #f4f7f4;
-  --popover: #242b33;
+  --popover: #000000;
   --popover-foreground: #f4f7f4;
   --primary: #3dce73;
   --primary-foreground: #102116;
-  --secondary: #2a313a;
+  --secondary: #141414;
   --secondary-foreground: #f4f7f4;
-  --muted: #2a313a;
+  --muted: #141414;
   --muted-foreground: #b7c0b9;
   --accent: #24302a;
   --accent-foreground: #d7f5e1;
@@ -106,3 +129,4 @@ html[data-theme="dark"] .dashboard-app {
   --chart-4: #f0a0a3;
   --chart-5: #c9d4cc;
 }
+

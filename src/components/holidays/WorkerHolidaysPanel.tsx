@@ -1,15 +1,25 @@
 "use client";
 
-import { AppDataTable, DataTableColumnHeader, TableMuted, TablePerson, TableStatus } from "@/components/lists/AppDataTable";
+import {
+  AppDataTable,
+  DataTableColumnHeader,
+  TableLongText,
+  TableMuted,
+  TableName,
+  TableStatus,
+  formatDateRange,
+} from "@/components/lists/AppDataTable";
 import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { RequiredMark } from "@/components/ui/RequiredMark";
+import { NoSitesNotice } from "@/components/dashboard/NoSitesNotice";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
+import { CalendarClock } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 
 type HolidayStatus = "draft" | "pending" | "approved" | "rejected";
@@ -28,17 +38,6 @@ type HolidayRow = {
 function errorText(error: unknown, fallback: string) {
   if (error instanceof ConvexError && typeof error.data === "string") return error.data;
   return fallback;
-}
-
-// Formats a YYYY-MM-DD date without shifting it across time zones.
-function formatDay(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return value;
-  return new Date(year, month - 1, day).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 // Lets a worker request time off for one job site in their company.
@@ -84,21 +83,25 @@ export function WorkerHolidaysPanel() {
 
   return (
     <>
-      <section className="saas-card invite-panel">
-        <h2 className="panel-title">Request time off</h2>
-        <p className="panel-copy">
-          Request time off for {company}. An admin reviews the request after you submit.
-        </p>
+      <section className="worker-card time-off-card">
+        <div className="time-off-head">
+          <span className="time-off-icon">
+            <CalendarClock aria-hidden="true" />
+          </span>
+          <div className="time-off-copy">
+            <h2 className="panel-title">Request time off</h2>
+            <p className="panel-copy">
+              Request time off for {company}. An admin reviews the request after you submit.
+            </p>
+          </div>
+        </div>
         {sites === undefined ? (
           <p className="invite-note">Loading job sites…</p>
         ) : sites.length === 0 ? (
-          <div className="empty-panel">
-            <h3 className="panel-title">No job sites assigned</h3>
-            <p className="panel-copy">Ask an administrator to assign a job site before you request time off.</p>
-          </div>
+          <NoSitesNotice message="Ask an administrator to assign a job site before you request time off." />
         ) : (
-          <form className="timesheet-form" onSubmit={onSubmit} noValidate>
-            <div className="timesheet-fields">
+          <form className="time-off-form" onSubmit={onSubmit} noValidate>
+            <div className="time-off-grid">
               <div>
                 <label className="form-label" htmlFor="holiday-site">
                   Job site
@@ -162,21 +165,19 @@ export function WorkerHolidaysPanel() {
                 onChange={(event) => setReason(event.target.value)}
               />
             </div>
-            <div className="timesheet-submit">
-              <button
-                className="btn-primary"
-                type="submit"
-                disabled={busy || !jobSiteId || !startDate || !endDate || !reason.trim()}
-              >
-                {busy ? "Saving…" : "Submit request"}
-              </button>
-            </div>
+            <button
+              className="btn-primary"
+              type="submit"
+              disabled={busy || !jobSiteId || !startDate || !endDate || !reason.trim()}
+            >
+              {busy ? "Saving…" : "Submit request"}
+            </button>
             {error ? <p className="field-error">{error}</p> : null}
           </form>
         )}
       </section>
 
-      <section className="saas-card stack-card">
+      <section className="worker-card">
         <h2 className="panel-title">Your requests</h2>
         <p className="panel-copy">Holiday requests you have submitted for {company}.</p>
         {holidays === undefined ? (
@@ -198,29 +199,39 @@ function HolidayTable({ rows }: { rows: HolidayRow[] }) {
       workerHolidayColumns.columns([
         workerHolidayColumns.accessor("jobSiteName", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
-          cell: ({ row }) => <TablePerson name={row.original.jobSiteName} />,
+          cell: ({ row }) => <TableName>{row.original.jobSiteName}</TableName>,
           sortFn: "text",
         }),
         workerHolidayColumns.accessor("startDate", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Dates" />,
-          cell: ({ row }) => <TableMuted>{`${formatDay(row.original.startDate)} – ${formatDay(row.original.endDate)}`}</TableMuted>,
+          cell: ({ row }) => <TableMuted>{formatDateRange(row.original.startDate, row.original.endDate)}</TableMuted>,
           sortFn: "alphanumeric",
         }),
         workerHolidayColumns.accessor("reason", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Reason" />,
-          cell: ({ row }) => <TableMuted>{row.original.reason}</TableMuted>,
+          cell: ({ row }) => <TableLongText text={row.original.reason} title="Reason" />,
           sortFn: "text",
         }),
-        workerHolidayColumns.accessor((row) => [row.status, row.rejectionReason].filter(Boolean).join(" "), {
-          id: "status",
+        workerHolidayColumns.accessor("status", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
           cell: ({ row }) => (
             <TableStatus
               label={statusLabel(row.original.status)}
-              detail={row.original.rejectionReason}
-              tone={row.original.status === "rejected" ? "danger" : "default"}
+              tone={
+                row.original.status === "approved"
+                  ? "success"
+                  : row.original.status === "rejected"
+                    ? "danger"
+                    : "warning"
+              }
             />
           ),
+          sortFn: "text",
+        }),
+        workerHolidayColumns.accessor((row) => row.rejectionReason ?? "", {
+          id: "rejectionReason",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Rejection reason" />,
+          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" />,
           sortFn: "text",
         }),
       ]),
@@ -231,8 +242,12 @@ function HolidayTable({ rows }: { rows: HolidayRow[] }) {
     <AppDataTable
       columns={columns}
       data={rows}
-      searchPlaceholder="Filter requests..."
+      searchPlaceholder="Search requests..."
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+      empty={{
+        title: "No holiday requests yet",
+        description: "Submitted requests will appear here once you request time off.",
+      }}
     />
   );
 }
@@ -247,15 +262,5 @@ function statusLabel(status: HolidayStatus) {
 
 // Shows the holiday request page for the signed-in worker.
 export function WorkerHolidaysPage() {
-  const workspace = useWorkspace();
-  const company = workspace.tenantName ?? "your company";
-
-  return (
-    <>
-      <header className="page-header">
-        <p className="page-description">Request time off from a job site at {company}.</p>
-      </header>
-      <WorkerHolidaysPanel />
-    </>
-  );
+  return <WorkerHolidaysPanel />;
 }

@@ -1,6 +1,10 @@
 import { SignInForm } from "@/components/auth/SignInForm";
 import { SsoCallback } from "@/components/auth/SsoCallback";
+import { resumeSession } from "@/lib/resume-session";
 import { Suspense } from "react";
+
+// This page checks for an open session, so navigation into it is allowed to block.
+export const instant = false;
 
 // Shows the sign-in form, or the Google callback when Clerk returns here.
 export default function SignInPage({
@@ -23,5 +27,6 @@ async function SignInRoute({
 }) {
   const { "sign-in": segments } = await params;
   if (segments?.includes("sso-callback")) return <SsoCallback />;
+  await resumeSession();
   return <SignInForm />;
 }

@@ -1,14 +1,24 @@
 "use client";
 
-import { AppDataTable, DataTableColumnHeader, TableFigure, TableMuted, TablePerson, TableStatus, emailHandle } from "@/components/lists/AppDataTable";
+import { ReviewBoard } from "@/components/dashboard/ReviewBoard";
+import {
+  AppDataTable,
+  DataTableColumnHeader,
+  TableFigure,
+  TableIconText,
+  TableLongText,
+  TablePerson,
+  TableStatus,
+  formatDateRange,
+} from "@/components/lists/AppDataTable";
 import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
+import { CalendarDays, MapPin } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const dayLabels = [
@@ -43,17 +53,6 @@ function errorText(error: unknown, fallback: string) {
   return fallback;
 }
 
-// Formats a YYYY-MM-DD date without shifting it across time zones.
-function formatDay(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return value;
-  return new Date(year, month - 1, day).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 // Formats an hour count, keeping a decimal only when the value is not whole.
 function formatHours(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -61,8 +60,6 @@ function formatHours(value: number) {
 
 // Lets an admin review submitted timesheets and approve or reject the ones still pending.
 export function TimesheetsPanel() {
-  const workspace = useWorkspace();
-  const company = workspace.tenantName ?? "this company";
   const timesheets = useQuery(api.timesheets.queries.listTimesheets);
   const decideTimesheet = useMutation(api.timesheets.mutations.decideTimesheet);
   const [error, setError] = useState("");
@@ -97,21 +94,13 @@ export function TimesheetsPanel() {
   }
 
   return (
-    <>
-      <section className="saas-card invite-panel">
-        <h2 className="panel-title">Timesheets</h2>
-        <p className="panel-copy">
-          Weekly hours workers at {company} have submitted. Approving or rejecting a pending timesheet records
-          that decision.
-        </p>
-        {error ? <p className="field-error">{error}</p> : null}
-        {rows === undefined ? (
-          <p className="invite-note">Loading timesheets…</p>
-        ) : (
-          <TimesheetTable rows={rows} busyId={busyId} onDecide={onDecide} />
-        )}
-      </section>
-    </>
+    <ReviewBoard title="Submitted Timesheets" noun="timesheets" rows={rows} error={error}>
+      {rows === undefined ? (
+        <p className="invite-note">Loading timesheets…</p>
+      ) : (
+        <TimesheetTable rows={rows} busyId={busyId} onDecide={onDecide} />
+      )}
+    </ReviewBoard>
   );
 }
 
@@ -133,58 +122,55 @@ function TimesheetTable({
         timesheetColumns.accessor((row) => `${row.workerName} ${row.workerEmail}`, {
           id: "worker",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Worker" />,
-          cell: ({ row }) => (
-            <TablePerson
-              name={row.original.workerName}
-              detail={row.original.workerEmail ? emailHandle(row.original.workerEmail) : "No email on file"}
-            />
-          ),
+          cell: ({ row }) => <TablePerson name={row.original.workerName} />,
           sortFn: "text",
         }),
         timesheetColumns.accessor("jobSiteName", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
-          cell: ({ row }) => <TableMuted>{row.original.jobSiteName}</TableMuted>,
+          cell: ({ row }) => (
+            <TableIconText icon={MapPin}>{row.original.jobSiteName}</TableIconText>
+          ),
           sortFn: "text",
         }),
         timesheetColumns.accessor("weekStart", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Week" />,
-          cell: ({ row }) => <TableMuted>{`${formatDay(row.original.weekStart)} – ${formatDay(row.original.weekEnd)}`}</TableMuted>,
+          cell: ({ row }) => (
+            <TableIconText icon={CalendarDays}>{formatDateRange(row.original.weekStart, row.original.weekEnd)}</TableIconText>
+          ),
           sortFn: "alphanumeric",
         }),
         timesheetColumns.accessor("totalHours", {
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Hours" align="end" />,
-          cell: ({ row }) => (
-            <div className="table-figure-stack">
-              <TableFigure value={`${formatHours(row.original.totalHours)}h`} />
-              <span className="table-person-detail">
-                {dayLabels.map(([key, label]) => `${label} ${formatHours(row.original.hours[key])}`).join(" · ")}
-              </span>
-            </div>
-          ),
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Hours" />,
+          cell: ({ row }) => <TableFigure value={`${formatHours(row.original.totalHours)}h`} />,
           sortFn: "alphanumeric",
         }),
         timesheetColumns.accessor((row) => row.comments ?? "", {
           id: "comments",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Comments" />,
-          cell: ({ row }) => <TableMuted>{row.original.comments || "No comments"}</TableMuted>,
+          cell: ({ row }) => <TableLongText text={row.original.comments} title="Comments" />,
           sortFn: "text",
         }),
-        timesheetColumns.accessor((row) => [row.status, row.rejectionReason].filter(Boolean).join(" "), {
-          id: "status",
+        timesheetColumns.accessor("status", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
           cell: ({ row }) => (
             <TableStatus
               label={statusLabel(row.original.status)}
-              detail={row.original.rejectionReason}
-              tone={row.original.status === "rejected" ? "danger" : "default"}
+              tone={row.original.status === "approved" ? "success" : row.original.status === "rejected" ? "danger" : "warning"}
             />
           ),
+          sortFn: "text",
+        }),
+        timesheetColumns.accessor((row) => row.rejectionReason ?? "", {
+          id: "rejectionReason",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Rejection reason" />,
+          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" />,
           sortFn: "text",
         }),
         ...(onDecide
           ? [
               timesheetColumns.display({
                 id: "actions",
+                header: "Actions",
                 enableSorting: false,
                 enableGlobalFilter: false,
                 cell: ({ row }) => {
@@ -217,8 +203,12 @@ function TimesheetTable({
     <AppDataTable
       columns={columns}
       data={rows}
-      searchPlaceholder="Filter timesheets..."
+      searchPlaceholder="Search by worker or site..."
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+      empty={{
+        title: "No timesheets yet",
+        description: "When workers submit weekly hours, they will appear here for your review.",
+      }}
     />
   );
 }

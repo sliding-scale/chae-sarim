@@ -1,6 +1,15 @@
 import { v } from "convex/values";
 import { query } from "../_generated/server";
-import { jobSiteLabel, requireAdmin, requireWorker, workerLabel } from "../lib";
+import {
+  daysInsideMonth,
+  homeWindow,
+  jobSiteLabel,
+  monthWindow,
+  requireAdmin,
+  requireWorker,
+  totalHours,
+  workerLabel,
+} from "../lib";
 
 const memberLimit = 100;
 const siteLimit = 100;
@@ -296,5 +305,222 @@ export const getWorkerStats = query({
     }
 
     return { timesheets, pendingTimesheets, invoices, pendingInvoices, holidays, pendingHolidays };
+  },
+});
+
+const homeLimit = 200;
+const teamPreview = 3;
+
+// Summarises the signed-in admin's company for the dashboard content.
+export const getAdminHome = query({
+  args: {
+    weekStartMs: v.number(),
+    weekEndMs: v.number(),
+    month: v.string(),
+  },
+  returns: v.object({
+    jobSites: v.number(),
+    pendingTimesheets: v.number(),
+    pendingInvoices: v.number(),
+    pendingHolidays: v.number(),
+    approvedTimesheets: v.number(),
+    approvedInvoices: v.number(),
+    approvedHolidays: v.number(),
+    workerCount: v.number(),
+    team: v.array(
+      v.object({
+        name: v.string(),
+        email: v.string(),
+        sites: v.string(),
+        imageUrl: v.union(v.string(), v.null()),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const membership = await requireAdmin(ctx);
+    const tenantId = membership.tenantId;
+    const window = homeWindow(args.weekStartMs, args.weekEndMs, args.month);
+
+    const jobSites = await ctx.db
+      .query("jobSites")
+      .withIndex("by_tenant_id_and_name", (q) => q.eq("tenantId", tenantId))
+      .take(homeLimit);
+    const pendingTimesheets = await ctx.db
+      .query("timesheets")
+      .withIndex("by_tenant_id_and_status", (q) => q.eq("tenantId", tenantId).eq("status", "pending"))
+      .take(homeLimit);
+    const pendingInvoices = await ctx.db
+      .query("workerInvoices")
+      .withIndex("by_tenant_id_and_status", (q) => q.eq("tenantId", tenantId).eq("status", "pending"))
+      .take(homeLimit);
+    const pendingHolidays = await ctx.db
+      .query("holidayRequests")
+      .withIndex("by_tenant_id_and_status", (q) => q.eq("tenantId", tenantId).eq("status", "pending"))
+      .take(homeLimit);
+
+    const approvedTimesheets = await ctx.db
+      .query("timesheets")
+      .withIndex("by_tenant_id_and_status", (q) => q.eq("tenantId", tenantId).eq("status", "approved"))
+      .take(homeLimit);
+    const approvedInvoices = await ctx.db
+      .query("workerInvoices")
+      .withIndex("by_tenant_id_and_status", (q) => q.eq("tenantId", tenantId).eq("status", "approved"))
+      .take(homeLimit);
+    const approvedHolidays = await ctx.db
+      .query("holidayRequests")
+      .withIndex("by_tenant_id_and_status", (q) => q.eq("tenantId", tenantId).eq("status", "approved"))
+      .take(homeLimit);
+
+    const memberships = await ctx.db
+      .query("memberships")
+      .withIndex("by_tenant_id_and_role", (q) => q.eq("tenantId", tenantId).eq("role", "worker"))
+      .take(homeLimit);
+    const workers = [];
+    for (const member of memberships) {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("by_clerk_id", (q) => q.eq("clerkId", member.clerkId))
+        .unique();
+      const assignments = await ctx.db
+        .query("jobSiteAssignments")
+        .withIndex("by_tenant_id_and_clerk_id", (q) =>
+          q.eq("tenantId", tenantId).eq("clerkId", member.clerkId),
+        )
+        .take(20);
+      const siteNames = [];
+      for (const assignment of assignments) {
+        const site = await ctx.db.get(assignment.jobSiteId);
+        if (site && site.tenantId === tenantId) siteNames.push(site.name);
+      }
+      siteNames.sort((a, b) => a.localeCompare(b));
+      workers.push({
+        name: user?.name || "Worker",
+        email: user?.email || member.clerkId,
+        sites: siteNames.join(", "),
+        imageUrl: user?.imageStorageId ? await ctx.storage.getUrl(user.imageStorageId) : null,
+      });
+    }
+    workers.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Counts a decision when it landed in the caller's current local week.
+    function decidedThisWeek(updatedAt: number) {
+      return updatedAt >= window.weekStartMs && updatedAt < window.weekEndMs;
+    }
+
+    return {
+      jobSites: jobSites.length,
+      pendingTimesheets: pendingTimesheets.length,
+      pendingInvoices: pendingInvoices.length,
+      pendingHolidays: pendingHolidays.length,
+      approvedTimesheets: approvedTimesheets.filter((row) => decidedThisWeek(row.updatedAt)).length,
+      approvedInvoices: approvedInvoices.filter((row) => decidedThisWeek(row.updatedAt)).length,
+      approvedHolidays: approvedHolidays.filter((row) => decidedThisWeek(row.updatedAt)).length,
+      workerCount: workers.length,
+      team: workers.slice(0, teamPreview),
+    };
+  },
+});
+
+const activityStatus = v.union(
+  v.literal("draft"),
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("rejected"),
+  v.null(),
+);
+
+// Summarises the signed-in worker's month, sites, and latest submissions.
+export const getWorkerHome = query({
+  args: {
+    month: v.string(),
+  },
+  returns: v.object({
+    sites: v.array(
+      v.object({
+        jobSiteId: v.id("jobSites"),
+        name: v.string(),
+        address: v.union(v.string(), v.null()),
+      }),
+    ),
+    hoursLogged: v.number(),
+    invoicesSubmitted: v.number(),
+    holidayDays: v.number(),
+    timesheetStatus: activityStatus,
+    invoiceStatus: activityStatus,
+    holidayStatus: activityStatus,
+  }),
+  handler: async (ctx, args) => {
+    const membership = await requireWorker(ctx);
+    const tenantId = membership.tenantId;
+    const window = monthWindow(args.month);
+    const assignments = await ctx.db
+      .query("jobSiteAssignments")
+      .withIndex("by_tenant_id_and_clerk_id", (q) =>
+        q.eq("tenantId", tenantId).eq("clerkId", membership.clerkId),
+      )
+      .take(homeLimit);
+    const sites = [];
+    for (const assignment of assignments) {
+      const site = await ctx.db.get(assignment.jobSiteId);
+      if (site && site.tenantId === tenantId) {
+        sites.push({ jobSiteId: site._id, name: site.name, address: site.address ?? null });
+      }
+    }
+    sites.sort((a, b) => a.name.localeCompare(b.name));
+
+    const timesheets = await ctx.db
+      .query("timesheets")
+      .withIndex("by_clerk_id_and_week_start", (q) => q.eq("clerkId", membership.clerkId))
+      .order("desc")
+      .take(homeLimit);
+    let hoursLogged = 0;
+    let timesheetStatus: "draft" | "pending" | "approved" | "rejected" | null = null;
+    for (const timesheet of timesheets) {
+      if (timesheet.tenantId !== tenantId) continue;
+      if (timesheetStatus === null) timesheetStatus = timesheet.status;
+      if (timesheet.weekStart.slice(0, 7) === window.month && timesheet.status !== "rejected") {
+        hoursLogged += totalHours(timesheet.hours);
+      }
+    }
+
+    const invoices = await ctx.db
+      .query("workerInvoices")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", membership.clerkId))
+      .order("desc")
+      .take(homeLimit);
+    let invoicesSubmitted = 0;
+    let invoiceStatus: "draft" | "pending" | "approved" | "rejected" | null = null;
+    for (const invoice of invoices) {
+      if (invoice.tenantId !== tenantId) continue;
+      if (invoiceStatus === null) invoiceStatus = invoice.status;
+      if (invoice.invoiceMonth === window.month && invoice.status !== "draft" && invoice.status !== "rejected") {
+        invoicesSubmitted += 1;
+      }
+    }
+
+    const holidays = await ctx.db
+      .query("holidayRequests")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", membership.clerkId))
+      .order("desc")
+      .take(homeLimit);
+    let holidayDays = 0;
+    let holidayStatus: "draft" | "pending" | "approved" | "rejected" | null = null;
+    for (const holiday of holidays) {
+      if (holiday.tenantId !== tenantId) continue;
+      if (holidayStatus === null) holidayStatus = holiday.status;
+      if (holiday.status === "approved") {
+        holidayDays += daysInsideMonth(holiday.startDate, holiday.endDate, window.monthStart, window.monthEnd);
+      }
+    }
+
+    return {
+      sites,
+      hoursLogged,
+      invoicesSubmitted,
+      holidayDays,
+      timesheetStatus,
+      invoiceStatus,
+      holidayStatus,
+    };
   },
 });

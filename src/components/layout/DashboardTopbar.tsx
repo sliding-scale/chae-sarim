@@ -1,6 +1,5 @@
 "use client";
 
-import ThemeSwitch from "@/components/ui/theme-switch";
 import { Menu } from "lucide-react";
 
 // Renders the dashboard title bar.
@@ -27,7 +26,6 @@ export function DashboardTopbar({
         </button>
         {title ? <h1 className="dashboard-title">{title}</h1> : null}
       </div>
-      <ThemeSwitch />
     </header>
   );
 }

@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { MutationCtx, QueryCtx } from "./_generated/server";
+import { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
 
 type DayHours = Doc<"timesheets">["hours"];
 
@@ -144,7 +144,44 @@ export const hoursValidator = v.object({
 });
 
 const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+const monthPattern = /^(\d{4})-(\d{2})$/;
 const weekLimitMs = 7 * 24 * 60 * 60 * 1000;
+const dayMs = 24 * 60 * 60 * 1000;
+
+// Checks a YYYY-MM month and returns its first and last calendar days.
+export function monthWindow(month: string) {
+  const match = monthPattern.exec(month);
+  if (!match) throw new ConvexError("Choose a month.");
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]);
+  if (monthIndex < 1 || monthIndex > 12) throw new ConvexError("Choose a month.");
+  const lastDay = new Date(Date.UTC(year, monthIndex, 0)).getUTCDate();
+  return {
+    month,
+    monthStart: `${month}-01`,
+    monthEnd: `${month}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+// Checks the caller's local week and month before a dashboard summary uses them.
+export function homeWindow(weekStartMs: number, weekEndMs: number, month: string) {
+  const span = weekEndMs - weekStartMs;
+  if (!Number.isFinite(weekStartMs) || !Number.isFinite(weekEndMs) || span < 6 * dayMs || span > 8 * dayMs) {
+    throw new ConvexError("Choose a week.");
+  }
+  return { weekStartMs, weekEndMs, ...monthWindow(month) };
+}
+
+// Counts inclusive days that a date range shares with a month.
+export function daysInsideMonth(startDate: string, endDate: string, monthStart: string, monthEnd: string) {
+  const from = startDate > monthStart ? startDate : monthStart;
+  const to = endDate < monthEnd ? endDate : monthEnd;
+  if (from > to) return 0;
+  const start = Date.parse(`${from}T00:00:00Z`);
+  const end = Date.parse(`${to}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+  return Math.round((end - start) / dayMs) + 1;
+}
 
 // Checks that a week starts on Monday and has not started more than a week ahead.
 export function weekRange(weekStart: string) {
@@ -460,7 +497,6 @@ export async function invoiceFileLinks(ctx: QueryCtx | MutationCtx, invoice: Doc
 
 const invoiceFileBytes = 10 * 1024 * 1024;
 const invoiceFileTypes = new Set(["application/pdf", "image/png", "image/jpeg"]);
-const monthPattern = /^(\d{4})-(\d{2})$/;
 
 // Checks that an invoice month is a real YYYY-MM and is not in the future.
 export function invoiceMonth(value: string) {
@@ -908,4 +944,456 @@ async function notifyMember(ctx: MutationCtx, tenantId: Id<"tenants">, clerkId: 
     read: false,
     createdAt: Date.now(),
   });
+}
+
+const sampleWorkers = [
+  { clerkId: "seed_worker_01", name: "Amina Rahman", email: "amina.rahman@example.com" },
+  { clerkId: "seed_worker_02", name: "James Okonkwo", email: "james.okonkwo@example.com" },
+  { clerkId: "seed_worker_03", name: "Priya Shah", email: "priya.shah@example.com" },
+  { clerkId: "seed_worker_04", name: "Daniel Brooks", email: "daniel.brooks@example.com" },
+  { clerkId: "seed_worker_05", name: "Fatima Ali", email: "fatima.ali@example.com" },
+  { clerkId: "seed_worker_06", name: "Lucas Meyer", email: "lucas.meyer@example.com" },
+  { clerkId: "seed_worker_07", name: "Hannah Kim", email: "hannah.kim@example.com" },
+  { clerkId: "seed_worker_08", name: "Omar Hassan", email: "omar.hassan@example.com" },
+  { clerkId: "seed_worker_09", name: "Sofia Alvarez", email: "sofia.alvarez@example.com" },
+  { clerkId: "seed_worker_10", name: "Noah Patel", email: "noah.patel@example.com" },
+  { clerkId: "seed_worker_11", name: "Grace Chen", email: "grace.chen@example.com" },
+  { clerkId: "seed_worker_12", name: "Malik Thompson", email: "malik.thompson@example.com" },
+  { clerkId: "seed_worker_13", name: "Elena Rossi", email: "elena.rossi@example.com" },
+  { clerkId: "seed_worker_14", name: "Yusuf Ahmed", email: "yusuf.ahmed@example.com" },
+  { clerkId: "seed_worker_15", name: "Chloe Martin", email: "chloe.martin@example.com" },
+  { clerkId: "seed_worker_16", name: "Arjun Mehta", email: "arjun.mehta@example.com" },
+  { clerkId: "seed_worker_17", name: "Leah Goldstein", email: "leah.goldstein@example.com" },
+  { clerkId: "seed_worker_18", name: "Samuel Wright", email: "samuel.wright@example.com" },
+  { clerkId: "seed_worker_19", name: "Maya Singh", email: "maya.singh@example.com" },
+  { clerkId: "seed_worker_20", name: "Ben Carter", email: "ben.carter@example.com" },
+];
+
+const sampleJobSites = [
+  { name: "Clifton Block 5", address: "Khayaban-e-Saadi, Clifton" },
+  { name: "DHA Phase 6", address: "26th Street, DHA Phase 6" },
+  { name: "PECHS Block 2", address: "Shahrah-e-Faisal, PECHS" },
+  { name: "Gulshan-e-Iqbal", address: "University Road, Block 13" },
+  { name: "North Nazimabad Block H", address: "5th Avenue, Block H" },
+  { name: "Korangi Industrial", address: "Sector 15, Korangi" },
+  { name: "Saddar Market", address: "Abdullah Haroon Road" },
+  { name: "Bahria Town", address: "Precinct 11, Bahria Town" },
+  { name: "Malir Cantt", address: "Airport Road, Malir" },
+  { name: "Lyari Riverside", address: "Mauripur Road, Lyari" },
+  { name: "SITE Area", address: "Manghopir Road, SITE" },
+  { name: "Orangi Town", address: "Sector 5, Orangi" },
+  { name: "Federal B Area", address: "Block 14, Federal B Area" },
+  { name: "Defence View", address: "Korangi Road, Defence View" },
+  { name: "Scheme 33", address: "University Road, Scheme 33" },
+];
+
+// Adds the sample workers and job sites to the only company when they are not already there.
+export async function seedSampleRoster(ctx: MutationCtx) {
+  const tenants = await ctx.db.query("tenants").take(2);
+  if (tenants.length !== 1) {
+    throw new ConvexError("Seed expects exactly one company.");
+  }
+  const tenantId = tenants[0]._id;
+
+  let workersAdded = 0;
+  for (const worker of sampleWorkers) {
+    const existingUser = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", worker.clerkId))
+      .unique();
+    if (existingUser) {
+      await ctx.db.patch(existingUser._id, { name: worker.name, email: worker.email });
+    } else {
+      await ctx.db.insert("users", worker);
+    }
+
+    const membership = await ctx.db
+      .query("memberships")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", worker.clerkId))
+      .unique();
+    if (membership) continue;
+    await ctx.db.insert("memberships", {
+      tenantId,
+      clerkId: worker.clerkId,
+      role: "worker",
+    });
+    workersAdded += 1;
+  }
+
+  let jobSitesAdded = 0;
+  for (const site of sampleJobSites) {
+    const existing = await ctx.db
+      .query("jobSites")
+      .withIndex("by_tenant_id_and_name", (q) => q.eq("tenantId", tenantId).eq("name", site.name))
+      .unique();
+    if (existing) continue;
+    await ctx.db.insert("jobSites", { tenantId, name: site.name, address: site.address });
+    jobSitesAdded += 1;
+  }
+
+  return { workersAdded, jobSitesAdded };
+}
+
+const shortRejection = "Hours do not match the site sign-in sheet.";
+const longTimesheetRejection =
+  "Thursday shows 10 hours on the timesheet, but the site gate log only has 6.5 hours, and Friday includes 4 hours after the site closed at 5pm. Saturday is listed at the weekday rate. Please correct Thursday and Friday, move Saturday to the weekend line, and add a short note from the site supervisor before resubmitting. We cannot approve this until those three days match the attendance record.";
+const longInvoiceRejection =
+  "The invoice quotes weekday rates for Saturday, and the overtime lines do not match the approved timesheet. Thursday and Friday are billed at 10 hours, but the approved sheet only has 6.5 and 4 hours after close. Please reissue the PDF against the approved hours, attach the supervisor's note, and resubmit. We cannot pay this version.";
+const longHolidayRejection =
+  "The Korangi shutdown is booked for the first week of December, and you are rostered as the lead electrician for the panel changeover. We can cover 4 and 5 December if you resubmit those two days on their own. The full week cannot be approved because the shutdown cannot move, and there is no one else signed off to isolate the boards.";
+
+type SampleStatus = "pending" | "approved" | "rejected";
+type SampleHours = Doc<"timesheets">["hours"];
+
+const weekday: SampleHours = { monday: 8, tuesday: 8, wednesday: 8, thursday: 8, friday: 8, saturday: 0, sunday: 0 };
+const shortWeek: SampleHours = { monday: 8, tuesday: 8, wednesday: 4, thursday: 0, friday: 0, saturday: 0, sunday: 0 };
+const overtime: SampleHours = { monday: 10, tuesday: 10, wednesday: 10, thursday: 10, friday: 8, saturday: 6, sunday: 0 };
+const weekend: SampleHours = { monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 8, saturday: 8, sunday: 8 };
+const decimals: SampleHours = { monday: 7.5, tuesday: 7.5, wednesday: 7.5, thursday: 7.5, friday: 7.5, saturday: 0, sunday: 0 };
+const oneLongDay: SampleHours = { monday: 24, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0, sunday: 0 };
+const mixedHours: SampleHours = { monday: 6, tuesday: 7.25, wednesday: 8, thursday: 8.5, friday: 9, saturday: 4, sunday: 0 };
+
+// Returns a job site in this company by its exact name.
+async function sampleSite(ctx: MutationCtx, tenantId: Id<"tenants">, name: string) {
+  const site = await ctx.db
+    .query("jobSites")
+    .withIndex("by_tenant_id_and_name", (q) => q.eq("tenantId", tenantId).eq("name", name))
+    .unique();
+  if (!site) throw new ConvexError(`Missing job site ${name}. Run the roster seed first.`);
+  return site._id;
+}
+
+// Stores a tiny PDF so a sample invoice has a file the admin can open.
+export async function storeSamplePdf(ctx: ActionCtx, title: string) {
+  const text = `%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 400 200]/Contents 4 0 R>>endobj
+4 0 obj<</Length 55>>stream
+BT /F1 18 Tf 40 100 Td (${title}) Tj ET
+endstream
+endobj
+trailer<</Root 1 0 R>>
+%%EOF`;
+  return await ctx.storage.store(new Blob([text], { type: "application/pdf" }));
+}
+
+const sampleInvoiceFileNames = [
+  "amina-clifton-oct.pdf",
+  "james-dha-sep.pdf",
+  "hannah-saddar-oct.pdf",
+  "hannah-saddar-receipt.jpg.pdf",
+  "noah-lyari-aug.pdf",
+  "priya-pechs-aug.pdf",
+  "daniel-gulshan-sep.pdf",
+  "omar-bahria-jul.pdf",
+  "grace-site-sep.pdf",
+  "fatima-block-h-sep.pdf",
+  "sofia-malir-aug.pdf",
+  "lucas-korangi-aug.pdf",
+  "malik-orangi-jul.pdf",
+  "sarim-clifton-oct.pdf",
+  "sarim-dha-sep.pdf",
+  "sarim-dha-sep-receipt.pdf",
+  "sarim-korangi-aug.pdf",
+  "sarim-site1-jul.pdf",
+  "sarim-korangi-sep.pdf",
+  "sarim-clifton-aug.pdf",
+];
+
+// Returns the sample invoice file names that need a stored PDF.
+export function listSampleInvoiceFileNames() {
+  return sampleInvoiceFileNames;
+}
+
+// Returns only Sarim YT's sample invoice file names.
+export function listSarimInvoiceFileNames() {
+  return sampleInvoiceFileNames.filter((fileName) => fileName.startsWith("sarim-"));
+}
+
+// Assigns sample workers to job sites and inserts timesheets, invoices, and holiday requests.
+export async function seedSampleActivity(
+  ctx: MutationCtx,
+  files: Array<{ fileName: string; fileStorageId: Id<"_storage"> }>,
+) {
+  if (longTimesheetRejection.length > 500 || longInvoiceRejection.length > 500 || longHolidayRejection.length > 500) {
+    throw new ConvexError("Sample rejection reason is too long.");
+  }
+  const tenants = await ctx.db.query("tenants").take(2);
+  if (tenants.length !== 1) throw new ConvexError("Seed expects exactly one company.");
+  const tenantId = tenants[0]._id;
+
+  const siteNames = [
+    "Clifton Block 5",
+    "DHA Phase 6",
+    "PECHS Block 2",
+    "Gulshan-e-Iqbal",
+    "North Nazimabad Block H",
+    "Korangi Industrial",
+    "Saddar Market",
+    "Bahria Town",
+    "Malir Cantt",
+    "Lyari Riverside",
+    "SITE Area",
+    "Orangi Town",
+    "Federal B Area",
+    "Defence View",
+    "Scheme 33",
+    "Site 1",
+  ] as const;
+  const sites: Record<(typeof siteNames)[number], Id<"jobSites">> = {
+    "Clifton Block 5": await sampleSite(ctx, tenantId, "Clifton Block 5"),
+    "DHA Phase 6": await sampleSite(ctx, tenantId, "DHA Phase 6"),
+    "PECHS Block 2": await sampleSite(ctx, tenantId, "PECHS Block 2"),
+    "Gulshan-e-Iqbal": await sampleSite(ctx, tenantId, "Gulshan-e-Iqbal"),
+    "North Nazimabad Block H": await sampleSite(ctx, tenantId, "North Nazimabad Block H"),
+    "Korangi Industrial": await sampleSite(ctx, tenantId, "Korangi Industrial"),
+    "Saddar Market": await sampleSite(ctx, tenantId, "Saddar Market"),
+    "Bahria Town": await sampleSite(ctx, tenantId, "Bahria Town"),
+    "Malir Cantt": await sampleSite(ctx, tenantId, "Malir Cantt"),
+    "Lyari Riverside": await sampleSite(ctx, tenantId, "Lyari Riverside"),
+    "SITE Area": await sampleSite(ctx, tenantId, "SITE Area"),
+    "Orangi Town": await sampleSite(ctx, tenantId, "Orangi Town"),
+    "Federal B Area": await sampleSite(ctx, tenantId, "Federal B Area"),
+    "Defence View": await sampleSite(ctx, tenantId, "Defence View"),
+    "Scheme 33": await sampleSite(ctx, tenantId, "Scheme 33"),
+    "Site 1": await sampleSite(ctx, tenantId, "Site 1"),
+  };
+
+  const assignments: Array<[string, (typeof siteNames)[number]]> = [
+    ["seed_worker_01", "Clifton Block 5"],
+    ["seed_worker_01", "DHA Phase 6"],
+    ["seed_worker_01", "Site 1"],
+    ["seed_worker_02", "DHA Phase 6"],
+    ["seed_worker_02", "PECHS Block 2"],
+    ["seed_worker_03", "PECHS Block 2"],
+    ["seed_worker_04", "Gulshan-e-Iqbal"],
+    ["seed_worker_05", "North Nazimabad Block H"],
+    ["seed_worker_06", "Korangi Industrial"],
+    ["seed_worker_07", "Saddar Market"],
+    ["seed_worker_07", "Clifton Block 5"],
+    ["seed_worker_08", "Bahria Town"],
+    ["seed_worker_09", "Malir Cantt"],
+    ["seed_worker_10", "Lyari Riverside"],
+    ["seed_worker_11", "SITE Area"],
+    ["seed_worker_12", "Orangi Town"],
+    ["seed_worker_13", "Federal B Area"],
+    ["seed_worker_13", "Defence View"],
+    ["seed_worker_14", "Defence View"],
+    ["seed_worker_15", "Scheme 33"],
+    ["seed_worker_16", "Site 1"],
+    ["seed_worker_16", "Clifton Block 5"],
+    ["seed_worker_17", "Gulshan-e-Iqbal"],
+    ["seed_worker_17", "Korangi Industrial"],
+    ["seed_worker_18", "Bahria Town"],
+    ["seed_worker_18", "Malir Cantt"],
+    ["seed_worker_19", "Scheme 33"],
+    ["seed_worker_19", "Site 1"],
+    ["seed_worker_20", "SITE Area"],
+    ["seed_worker_20", "Orangi Town"],
+    ["user_3KlzGyq6huxq3rs1GOLeATV2GsU", "Clifton Block 5"],
+    ["user_3KlzGyq6huxq3rs1GOLeATV2GsU", "DHA Phase 6"],
+    ["user_3KlzGyq6huxq3rs1GOLeATV2GsU", "Korangi Industrial"],
+  ];
+
+  let assignmentsAdded = 0;
+  for (const [clerkId, siteName] of assignments) {
+    const jobSiteId = sites[siteName];
+    const existing = await ctx.db
+      .query("jobSiteAssignments")
+      .withIndex("by_clerk_id_and_job_site_id", (q) => q.eq("clerkId", clerkId).eq("jobSiteId", jobSiteId))
+      .unique();
+    if (existing) continue;
+    await ctx.db.insert("jobSiteAssignments", { tenantId, clerkId, jobSiteId });
+    assignmentsAdded += 1;
+  }
+
+  const timesheets: Array<{
+    clerkId: string;
+    site: (typeof siteNames)[number];
+    weekStart: string;
+    weekEnd: string;
+    hours: SampleHours;
+    comments: string;
+    status: SampleStatus;
+    rejectionReason: string;
+  }> = [
+    { clerkId: "seed_worker_01", site: "Clifton Block 5", weekStart: "2026-10-05", weekEnd: "2026-10-11", hours: weekday, comments: "Regular week on the Clifton fit-out.", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_02", site: "DHA Phase 6", weekStart: "2026-10-12", weekEnd: "2026-10-18", hours: shortWeek, comments: "", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_07", site: "Saddar Market", weekStart: "2026-09-28", weekEnd: "2026-10-04", hours: mixedHours, comments: "Rain stopped work on Wednesday afternoon, so Thursday ran long to make up the plastering. Saturday was a half day to finish the shopfront before the market opened.", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_10", site: "Lyari Riverside", weekStart: "2026-09-21", weekEnd: "2026-09-27", hours: decimals, comments: "Half-hour lunch deducted each weekday.", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_03", site: "PECHS Block 2", weekStart: "2026-09-14", weekEnd: "2026-09-20", hours: weekday, comments: "Approved against the site diary.", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_04", site: "Gulshan-e-Iqbal", weekStart: "2026-09-07", weekEnd: "2026-09-13", hours: overtime, comments: "Overtime agreed with the supervisor for the slab pour.", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_08", site: "Bahria Town", weekStart: "2026-08-31", weekEnd: "2026-09-06", hours: weekend, comments: "Weekend handover shift.", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_11", site: "SITE Area", weekStart: "2026-08-24", weekEnd: "2026-08-30", hours: oneLongDay, comments: "Emergency call-out on Monday.", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_05", site: "North Nazimabad Block H", weekStart: "2026-08-17", weekEnd: "2026-08-23", hours: weekday, comments: "", status: "rejected", rejectionReason: shortRejection },
+    { clerkId: "seed_worker_09", site: "Malir Cantt", weekStart: "2026-08-10", weekEnd: "2026-08-16", hours: shortWeek, comments: "Left early on Wednesday.", status: "rejected", rejectionReason: "Wednesday hours belong on Defence View, not Malir." },
+    { clerkId: "seed_worker_06", site: "Korangi Industrial", weekStart: "2026-08-03", weekEnd: "2026-08-09", hours: overtime, comments: "Claiming the full overtime week.", status: "rejected", rejectionReason: longTimesheetRejection },
+    { clerkId: "seed_worker_12", site: "Orangi Town", weekStart: "2026-07-27", weekEnd: "2026-08-02", hours: mixedHours, comments: "Please see the attached site note about the delayed concrete delivery.", status: "rejected", rejectionReason: "The Saturday half day was not authorised, and the Tuesday entry of 7.25 hours does not match the 6 hours on the gate log. Remove Saturday, correct Tuesday, and resubmit. The rest of the week is fine, but we cannot approve a timesheet that still includes unauthorised weekend time or a day that disagrees with the attendance record." },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "DHA Phase 6", weekStart: "2026-10-12", weekEnd: "2026-10-18", hours: shortWeek, comments: "Left after the concrete delivery on Wednesday.", status: "pending", rejectionReason: "" },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Clifton Block 5", weekStart: "2026-10-05", weekEnd: "2026-10-11", hours: weekday, comments: "Regular week on the Clifton fit-out.", status: "pending", rejectionReason: "" },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Korangi Industrial", weekStart: "2026-09-28", weekEnd: "2026-10-04", hours: overtime, comments: "Overtime agreed for the panel changeover.", status: "approved", rejectionReason: "" },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Site 1", weekStart: "2026-09-21", weekEnd: "2026-09-27", hours: decimals, comments: "Half-hour lunch deducted each weekday.", status: "approved", rejectionReason: "" },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "DHA Phase 6", weekStart: "2026-09-14", weekEnd: "2026-09-20", hours: weekday, comments: "", status: "rejected", rejectionReason: shortRejection },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Clifton Block 5", weekStart: "2026-09-07", weekEnd: "2026-09-13", hours: overtime, comments: "Claiming the full overtime week.", status: "rejected", rejectionReason: longTimesheetRejection },
+  ];
+
+  let timesheetsAdded = 0;
+  for (const sheet of timesheets) {
+    const matches = await ctx.db
+      .query("timesheets")
+      .withIndex("by_clerk_id_and_week_start", (q) => q.eq("clerkId", sheet.clerkId).eq("weekStart", sheet.weekStart))
+      .take(20);
+    if (matches.some((row) => row.jobSiteId === sites[sheet.site])) continue;
+    await ctx.db.insert("timesheets", {
+      tenantId,
+      clerkId: sheet.clerkId,
+      weekStart: sheet.weekStart,
+      weekEnd: sheet.weekEnd,
+      jobSiteId: sites[sheet.site],
+      comments: sheet.comments,
+      hours: sheet.hours,
+      status: sheet.status,
+      rejectionReason: sheet.rejectionReason,
+      updatedAt: Date.now(),
+    });
+    timesheetsAdded += 1;
+  }
+
+  const invoices: Array<{
+    clerkId: string;
+    site: (typeof siteNames)[number];
+    invoiceMonth: string;
+    amount?: number;
+    fileName: string;
+    extraFileName?: string;
+    status: SampleStatus;
+    rejectionReason: string;
+  }> = [
+    { clerkId: "seed_worker_01", site: "Clifton Block 5", invoiceMonth: "2026-10", amount: 85000, fileName: "amina-clifton-oct.pdf", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_02", site: "DHA Phase 6", invoiceMonth: "2026-09", amount: 42500.75, fileName: "james-dha-sep.pdf", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_07", site: "Saddar Market", invoiceMonth: "2026-10", amount: 31000, fileName: "hannah-saddar-oct.pdf", extraFileName: "hannah-saddar-receipt.jpg.pdf", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_10", site: "Lyari Riverside", invoiceMonth: "2026-08", fileName: "noah-lyari-aug.pdf", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_03", site: "PECHS Block 2", invoiceMonth: "2026-08", amount: 120000, fileName: "priya-pechs-aug.pdf", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_04", site: "Gulshan-e-Iqbal", invoiceMonth: "2026-09", amount: 1500, fileName: "daniel-gulshan-sep.pdf", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_08", site: "Bahria Town", invoiceMonth: "2026-07", amount: 250000, fileName: "omar-bahria-jul.pdf", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_11", site: "SITE Area", invoiceMonth: "2026-09", amount: 64000, fileName: "grace-site-sep.pdf", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_05", site: "North Nazimabad Block H", invoiceMonth: "2026-09", amount: 54000, fileName: "fatima-block-h-sep.pdf", status: "rejected", rejectionReason: "The invoice total does not match the approved hours." },
+    { clerkId: "seed_worker_09", site: "Malir Cantt", invoiceMonth: "2026-08", amount: 27500, fileName: "sofia-malir-aug.pdf", status: "rejected", rejectionReason: "Wrong job site. Resubmit this against Defence View." },
+    { clerkId: "seed_worker_06", site: "Korangi Industrial", invoiceMonth: "2026-08", amount: 98000, fileName: "lucas-korangi-aug.pdf", status: "rejected", rejectionReason: longInvoiceRejection },
+    { clerkId: "seed_worker_12", site: "Orangi Town", invoiceMonth: "2026-07", amount: 73250.5, fileName: "malik-orangi-jul.pdf", status: "rejected", rejectionReason: "The PDF total is 73,250.50 but the line items add up to 68,100. The materials row looks duplicated from June, and there is no receipt for the 5,150 transport charge. Please send a corrected PDF with the duplicate row removed and the transport receipt attached as a second file. We will review it again once both files are on the same invoice." },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Clifton Block 5", invoiceMonth: "2026-10", amount: 42000, fileName: "sarim-clifton-oct.pdf", status: "pending", rejectionReason: "" },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "DHA Phase 6", invoiceMonth: "2026-09", amount: 42500.75, fileName: "sarim-dha-sep.pdf", extraFileName: "sarim-dha-sep-receipt.pdf", status: "pending", rejectionReason: "" },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Korangi Industrial", invoiceMonth: "2026-08", amount: 64000, fileName: "sarim-korangi-aug.pdf", status: "approved", rejectionReason: "" },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Site 1", invoiceMonth: "2026-07", amount: 18500, fileName: "sarim-site1-jul.pdf", status: "approved", rejectionReason: "" },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Korangi Industrial", invoiceMonth: "2026-09", amount: 54000, fileName: "sarim-korangi-sep.pdf", status: "rejected", rejectionReason: "The invoice total does not match the approved hours." },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Clifton Block 5", invoiceMonth: "2026-08", amount: 98000, fileName: "sarim-clifton-aug.pdf", status: "rejected", rejectionReason: longInvoiceRejection },
+  ];
+
+  let invoicesAdded = 0;
+  for (const invoice of invoices) {
+    const existing = await ctx.db
+      .query("workerInvoices")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", invoice.clerkId))
+      .take(20);
+    const match = existing.find((row) => row.invoiceMonth === invoice.invoiceMonth && row.jobSiteId === sites[invoice.site]);
+    if (match) {
+      if ((match.rejectionReason ?? "") !== invoice.rejectionReason) {
+        await ctx.db.patch(match._id, { rejectionReason: invoice.rejectionReason, updatedAt: Date.now() });
+      }
+      continue;
+    }
+    const stored = new Map(files.map((file) => [file.fileName, file.fileStorageId]));
+    const fileStorageId = stored.get(invoice.fileName);
+    const extraStorageId = invoice.extraFileName ? stored.get(invoice.extraFileName) : undefined;
+    if (!fileStorageId || (invoice.extraFileName && !extraStorageId)) {
+      throw new ConvexError(`Missing sample file for ${invoice.fileName}.`);
+    }
+    const invoiceFiles = [{ fileStorageId, fileName: invoice.fileName }];
+    if (invoice.extraFileName && extraStorageId) {
+      invoiceFiles.push({ fileStorageId: extraStorageId, fileName: invoice.extraFileName });
+    }
+    const primary = invoiceFiles[0];
+    await ctx.db.insert("workerInvoices", {
+      tenantId,
+      clerkId: invoice.clerkId,
+      fileStorageId: primary.fileStorageId,
+      fileName: primary.fileName,
+      invoiceFiles,
+      invoiceMonth: invoice.invoiceMonth,
+      jobSiteId: sites[invoice.site],
+      ...(invoice.amount === undefined ? {} : { amount: invoice.amount }),
+      status: invoice.status,
+      rejectionReason: invoice.rejectionReason,
+      updatedAt: Date.now(),
+    });
+    invoicesAdded += 1;
+  }
+
+  const longHolidayReason =
+    "I need 7 to 12 December off because my sister's wedding is in Lahore and I am travelling with my parents on 7 December. The ceremonies run through 12 December, and I would be back on site the following Monday. I have already spoken to the supervisor and the other electricians can cover the shopfront work that week.";
+  const longPendingHolidayReason =
+    "I need 21 to 31 December off to travel with my parents for the end of the year. We leave on the 21st and I would be back on site on 4 January. I have already spoken to the supervisor, and the other electricians can cover the shopfront work while I am away.";
+
+  const holidays: Array<{
+    clerkId: string;
+    site: (typeof siteNames)[number];
+    startDate: string;
+    endDate: string;
+    reason: string;
+    status: SampleStatus;
+    rejectionReason: string;
+  }> = [
+    { clerkId: "seed_worker_01", site: "Clifton Block 5", startDate: "2026-11-02", endDate: "2026-11-06", reason: "Family wedding in Lahore.", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_02", site: "DHA Phase 6", startDate: "2026-12-21", endDate: "2026-12-31", reason: longPendingHolidayReason, status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_07", site: "Saddar Market", startDate: "2026-10-19", endDate: "2026-10-19", reason: "Clinic appointment.", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_10", site: "Lyari Riverside", startDate: "2026-10-20", endDate: "2026-10-23", reason: "Moving house.", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_03", site: "PECHS Block 2", startDate: "2026-10-26", endDate: "2026-10-27", reason: "Medical appointment and recovery day.", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_04", site: "Gulshan-e-Iqbal", startDate: "2026-11-16", endDate: "2026-11-20", reason: "Annual leave.", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_08", site: "Bahria Town", startDate: "2026-09-01", endDate: "2026-09-04", reason: "Already taken. Logged after the fact.", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_16", site: "Site 1", startDate: "2026-11-30", endDate: "2026-12-02", reason: "School parents' week.", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_05", site: "North Nazimabad Block H", startDate: "2026-11-09", endDate: "2026-11-11", reason: "Family visit.", status: "rejected", rejectionReason: "That week is already fully staffed." },
+    { clerkId: "seed_worker_09", site: "Malir Cantt", startDate: "2026-12-14", endDate: "2026-12-18", reason: "Travel.", status: "rejected", rejectionReason: "Please request this on Defence View instead." },
+    { clerkId: "seed_worker_06", site: "Korangi Industrial", startDate: "2026-12-01", endDate: "2026-12-05", reason: "Sister's wedding.", status: "rejected", rejectionReason: longHolidayRejection },
+    { clerkId: "seed_worker_12", site: "Orangi Town", startDate: "2026-12-07", endDate: "2026-12-12", reason: longHolidayReason, status: "rejected", rejectionReason: "The slab pour is booked for 8 and 9 December, and you are the only person signed off to run it. We can approve 11 and 12 December if you resubmit those two days on their own. The longer request cannot be covered, and the site cannot pause the pour for a full week." },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "DHA Phase 6", startDate: "2026-10-19", endDate: "2026-10-19", reason: "Clinic appointment.", status: "pending", rejectionReason: "" },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Korangi Industrial", startDate: "2026-12-21", endDate: "2026-12-31", reason: longPendingHolidayReason, status: "pending", rejectionReason: "" },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "DHA Phase 6", startDate: "2026-10-26", endDate: "2026-10-27", reason: "Medical appointment and recovery day.", status: "approved", rejectionReason: "" },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Site 1", startDate: "2026-09-01", endDate: "2026-09-04", reason: "Already taken. Logged after the fact.", status: "approved", rejectionReason: "" },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Korangi Industrial", startDate: "2026-11-09", endDate: "2026-11-11", reason: "Family visit.", status: "rejected", rejectionReason: "That week is already fully staffed." },
+    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Clifton Block 5", startDate: "2026-12-01", endDate: "2026-12-05", reason: longHolidayReason, status: "rejected", rejectionReason: longHolidayRejection },
+  ];
+
+  let holidaysAdded = 0;
+  for (const holiday of holidays) {
+    const existing = await ctx.db
+      .query("holidayRequests")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", holiday.clerkId))
+      .take(20);
+    const match = existing.find((row) => row.startDate === holiday.startDate && row.jobSiteId === sites[holiday.site]);
+    if (match) {
+      if (match.reason !== holiday.reason || (match.rejectionReason ?? "") !== holiday.rejectionReason) {
+        await ctx.db.patch(match._id, {
+          reason: holiday.reason,
+          rejectionReason: holiday.rejectionReason,
+          updatedAt: Date.now(),
+        });
+      }
+      continue;
+    }
+    await ctx.db.insert("holidayRequests", {
+      tenantId,
+      clerkId: holiday.clerkId,
+      jobSiteId: sites[holiday.site],
+      startDate: holiday.startDate,
+      endDate: holiday.endDate,
+      reason: holiday.reason,
+      status: holiday.status,
+      rejectionReason: holiday.rejectionReason,
+      updatedAt: Date.now(),
+    });
+    holidaysAdded += 1;
+  }
+
+  return { assignmentsAdded, timesheetsAdded, invoicesAdded, holidaysAdded };
 }

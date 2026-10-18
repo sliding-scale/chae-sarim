@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { query } from "../_generated/server";
-import { requireAdmin, requireWorker } from "../lib";
+import { requireAdmin, requireWorker, workerLabel } from "../lib";
 
 const jobSiteLimit = 100;
 
@@ -12,6 +12,7 @@ export const listJobSites = query({
       jobSiteId: v.id("jobSites"),
       name: v.string(),
       address: v.union(v.string(), v.null()),
+      workers: v.array(v.object({ name: v.string() })),
     }),
   ),
   handler: async (ctx) => {
@@ -21,11 +22,27 @@ export const listJobSites = query({
       .withIndex("by_tenant_id_and_name", (q) => q.eq("tenantId", membership.tenantId))
       .take(jobSiteLimit);
 
-    return sites.map((site) => ({
-      jobSiteId: site._id,
-      name: site.name,
-      address: site.address ?? null,
-    }));
+    const rows = [];
+    for (const site of sites) {
+      const assignments = await ctx.db
+        .query("jobSiteAssignments")
+        .withIndex("by_job_site_id", (q) => q.eq("jobSiteId", site._id))
+        .take(12);
+      const workers = [];
+      for (const assignment of assignments) {
+        if (assignment.tenantId !== membership.tenantId) continue;
+        const worker = await workerLabel(ctx, assignment.clerkId);
+        workers.push({ name: worker.name });
+      }
+      workers.sort((a, b) => a.name.localeCompare(b.name));
+      rows.push({
+        jobSiteId: site._id,
+        name: site.name,
+        address: site.address ?? null,
+        workers,
+      });
+    }
+    return rows;
   },
 });
 

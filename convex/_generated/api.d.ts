@@ -24,6 +24,7 @@ import type * as memberships_mutations from "../memberships/mutations.js";
 import type * as memberships_queries from "../memberships/queries.js";
 import type * as notifications_mutations from "../notifications/mutations.js";
 import type * as notifications_queries from "../notifications/queries.js";
+import type * as seed from "../seed.js";
 import type * as tenants_mutations from "../tenants/mutations.js";
 import type * as tenants_queries from "../tenants/queries.js";
 import type * as timesheets_mutations from "../timesheets/mutations.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   "memberships/queries": typeof memberships_queries;
   "notifications/mutations": typeof notifications_mutations;
   "notifications/queries": typeof notifications_queries;
+  seed: typeof seed;
   "tenants/mutations": typeof tenants_mutations;
   "tenants/queries": typeof tenants_queries;
   "timesheets/mutations": typeof timesheets_mutations;

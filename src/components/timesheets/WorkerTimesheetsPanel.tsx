@@ -1,15 +1,26 @@
 "use client";
 
-import { AppDataTable, DataTableColumnHeader, TableFigure, TableMuted, TablePerson, TableStatus } from "@/components/lists/AppDataTable";
+import {
+  AppDataTable,
+  DataTableColumnHeader,
+  TableFigure,
+  TableLongText,
+  TableMuted,
+  TableName,
+  TableStatus,
+  formatDateRange,
+} from "@/components/lists/AppDataTable";
 import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { RequiredMark } from "@/components/ui/RequiredMark";
+import { NoSitesNotice } from "@/components/dashboard/NoSitesNotice";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
+import { Clock } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 
 const dayLabels = [
@@ -67,6 +78,12 @@ function formatDay(value: string) {
 // Formats an hour count, keeping a decimal only when the value is not whole.
 function formatHours(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+// Lists only the days with hours, such as "Mon 8 · Tue 8 · Wed 4".
+function workedDays(hours: Record<DayKey, number>) {
+  const days = dayLabels.filter(([key]) => hours[key] > 0).map(([key, label]) => `${label.slice(0, 3)} ${formatHours(hours[key])}`);
+  return days.length > 0 ? days.join(" · ") : "No hours";
 }
 
 // Returns Monday of the week that contains today, in the browser's calendar.
@@ -147,18 +164,22 @@ export function WorkerTimesheetsPanel() {
 
   return (
     <>
-      <section className="saas-card invite-panel">
-        <h2 className="panel-title">Submit a week</h2>
-        <p className="panel-copy">
-          Record the hours you worked for {company}. An admin reviews the week after you submit.
-        </p>
+      <section className="worker-card time-off-card">
+        <div className="time-off-head">
+          <span className="time-off-icon">
+            <Clock aria-hidden="true" />
+          </span>
+          <div className="time-off-copy">
+            <h2 className="panel-title">Submit a week</h2>
+            <p className="panel-copy">
+              Record the hours you worked for {company}. An admin reviews the week after you submit.
+            </p>
+          </div>
+        </div>
         {loading ? (
           <p className="invite-note">Loading job sites…</p>
         ) : sites.length === 0 ? (
-          <div className="empty-panel">
-            <h3 className="panel-title">No job sites assigned</h3>
-            <p className="panel-copy">Ask an administrator to assign a job site before you submit hours.</p>
-          </div>
+          <NoSitesNotice message="Ask an administrator to assign a job site before you submit hours." />
         ) : (
           <TimesheetForm
             key={`${jobSiteId}:${weekStart}:${selected?.updatedAt ?? "new"}`}
@@ -174,7 +195,7 @@ export function WorkerTimesheetsPanel() {
         )}
       </section>
 
-      <section className="saas-card stack-card">
+      <section className="worker-card">
         <h2 className="panel-title">Your timesheets</h2>
         <p className="panel-copy">Weeks you have submitted for {company}.</p>
         {timesheets === undefined ? (
@@ -222,6 +243,12 @@ function TimesheetForm({
     const value = Number(hours[key]);
     return sum + (Number.isFinite(value) ? value : 0);
   }, 0);
+  const hoursReady = dayLabels.every(([key]) => {
+    const raw = hours[key].trim();
+    if (!raw) return false;
+    const value = Number(raw);
+    return Number.isFinite(value) && value >= 0 && value <= 24;
+  });
   const submitLabel =
     existing?.status === "pending"
       ? "Update timesheet"
@@ -358,7 +385,7 @@ function TimesheetForm({
         {locked ? (
           <p className="invite-note">This week is already approved for that job site.</p>
         ) : (
-          <button className="btn-primary" type="submit" disabled={busy || !jobSiteId}>
+          <button className="btn-primary" type="submit" disabled={busy || !jobSiteId || !weekStart || !hoursReady}>
             {busy ? "Saving…" : submitLabel}
           </button>
         )}
@@ -377,22 +404,20 @@ function TimesheetTable({ rows }: { rows: TimesheetRow[] }) {
       workerTimesheetColumns.columns([
         workerTimesheetColumns.accessor("jobSiteName", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
-          cell: ({ row }) => <TablePerson name={row.original.jobSiteName} />,
+          cell: ({ row }) => <TableName>{row.original.jobSiteName}</TableName>,
           sortFn: "text",
         }),
         workerTimesheetColumns.accessor("weekStart", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Week" />,
-          cell: ({ row }) => <TableMuted>{`${formatDay(row.original.weekStart)} – ${formatDay(row.original.weekEnd)}`}</TableMuted>,
+          cell: ({ row }) => <TableMuted>{formatDateRange(row.original.weekStart, row.original.weekEnd)}</TableMuted>,
           sortFn: "alphanumeric",
         }),
         workerTimesheetColumns.accessor("totalHours", {
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Hours" align="end" />,
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Hours" />,
           cell: ({ row }) => (
             <div className="table-figure-stack">
               <TableFigure value={`${formatHours(row.original.totalHours)}h`} />
-              <span className="table-person-detail">
-                {dayLabels.map(([key, label]) => `${label.slice(0, 3)} ${formatHours(row.original.hours[key])}`).join(" · ")}
-              </span>
+              <span className="table-person-detail">{workedDays(row.original.hours)}</span>
             </div>
           ),
           sortFn: "alphanumeric",
@@ -400,19 +425,29 @@ function TimesheetTable({ rows }: { rows: TimesheetRow[] }) {
         workerTimesheetColumns.accessor((row) => row.comments ?? "", {
           id: "comments",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Comments" />,
-          cell: ({ row }) => <TableMuted>{row.original.comments || "No comments"}</TableMuted>,
+          cell: ({ row }) => <TableLongText text={row.original.comments} title="Comments" />,
           sortFn: "text",
         }),
-        workerTimesheetColumns.accessor((row) => [row.status, row.rejectionReason].filter(Boolean).join(" "), {
-          id: "status",
+        workerTimesheetColumns.accessor("status", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
           cell: ({ row }) => (
             <TableStatus
               label={statusLabel(row.original.status)}
-              detail={row.original.rejectionReason}
-              tone={row.original.status === "rejected" ? "danger" : "default"}
+              tone={
+                row.original.status === "approved"
+                  ? "success"
+                  : row.original.status === "rejected"
+                    ? "danger"
+                    : "warning"
+              }
             />
           ),
+          sortFn: "text",
+        }),
+        workerTimesheetColumns.accessor((row) => row.rejectionReason ?? "", {
+          id: "rejectionReason",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Rejection reason" />,
+          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" />,
           sortFn: "text",
         }),
       ]),
@@ -423,8 +458,12 @@ function TimesheetTable({ rows }: { rows: TimesheetRow[] }) {
     <AppDataTable
       columns={columns}
       data={rows}
-      searchPlaceholder="Filter timesheets..."
+      searchPlaceholder="Search timesheets..."
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+      empty={{
+        title: "No timesheets yet",
+        description: "Submitted weeks will appear here once you log hours.",
+      }}
     />
   );
 }
@@ -439,15 +478,5 @@ function statusLabel(status: TimesheetStatus) {
 
 // Shows the timesheet page for the signed-in worker.
 export function WorkerTimesheetsPage() {
-  const workspace = useWorkspace();
-  const company = workspace.tenantName ?? "your company";
-
-  return (
-    <>
-      <header className="page-header">
-        <p className="page-description">Submit weekly hours for a job site at {company}.</p>
-      </header>
-      <WorkerTimesheetsPanel />
-    </>
-  );
+  return <WorkerTimesheetsPanel />;
 }

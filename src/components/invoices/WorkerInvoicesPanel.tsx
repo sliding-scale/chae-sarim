@@ -1,16 +1,27 @@
 "use client";
 
-import { AppDataTable, DataTableColumnHeader, TableFigure, TableMuted, TablePerson, TableStatus } from "@/components/lists/AppDataTable";
+import {
+  AppDataTable,
+  DataTableColumnHeader,
+  TableFigure,
+  TableLongText,
+  TableMuted,
+  TableName,
+  TableStatus,
+} from "@/components/lists/AppDataTable";
 import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { FileUpload } from "@/components/ui/file-upload";
 import { RequiredMark } from "@/components/ui/RequiredMark";
+import { NoSitesNotice } from "@/components/dashboard/NoSitesNotice";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FileUp } from "lucide-react";
+import { FormEvent, useMemo, useState } from "react";
 
 const maxFiles = 10;
 const maxBytes = 10 * 1024 * 1024;
@@ -80,34 +91,7 @@ export function WorkerInvoicesPanel() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const confirm = useConfirm();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const jobSiteId = jobSiteChoice ?? sites?.[0]?.jobSiteId ?? "";
-
-  // Adds chosen files that are a PDF, PNG, or JPG under 10 MB.
-  function onPickFiles(list: FileList | null) {
-    if (!list) return;
-    const next = [...files];
-    let message = "";
-    for (const file of list) {
-      if (!contentType(file)) {
-        message = "Upload a PDF, PNG, or JPG.";
-        continue;
-      }
-      if (file.size > maxBytes) {
-        message = "Each file must be 10 MB or smaller.";
-        continue;
-      }
-      const duplicate = next.some((item) => item.name === file.name && item.size === file.size);
-      if (!duplicate) next.push(file);
-    }
-    if (next.length > maxFiles) {
-      message = "Upload between 1 and 10 files.";
-      setFiles(next.slice(0, maxFiles));
-    } else {
-      setFiles(next);
-    }
-    setError(message);
-  }
 
   // Uploads the chosen files and submits the invoice for review.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -155,21 +139,25 @@ export function WorkerInvoicesPanel() {
 
   return (
     <>
-      <section className="saas-card invite-panel">
-        <h2 className="panel-title">Upload an invoice</h2>
-        <p className="panel-copy">
-          Send a PDF, PNG, or JPG for {company}. An admin reviews it after you upload.
-        </p>
+      <section className="worker-card time-off-card">
+        <div className="time-off-head">
+          <span className="time-off-icon">
+            <FileUp aria-hidden="true" />
+          </span>
+          <div className="time-off-copy">
+            <h2 className="panel-title">Upload an invoice</h2>
+            <p className="panel-copy">
+              Send a PDF, PNG, or JPG for {company}. An admin reviews it after you upload.
+            </p>
+          </div>
+        </div>
         {sites === undefined ? (
           <p className="invite-note">Loading job sites…</p>
         ) : sites.length === 0 ? (
-          <div className="empty-panel">
-            <h3 className="panel-title">No job sites assigned</h3>
-            <p className="panel-copy">Ask an administrator to assign a job site before you upload an invoice.</p>
-          </div>
+          <NoSitesNotice message="Ask an administrator to assign a job site before you upload an invoice." />
         ) : (
-          <form className="timesheet-form" onSubmit={onSubmit} noValidate>
-            <div className="timesheet-fields">
+          <form className="time-off-form" onSubmit={onSubmit} noValidate>
+            <div className="time-off-grid">
               <div>
                 <label className="form-label" htmlFor="invoice-site">
                   Job site
@@ -218,58 +206,21 @@ export function WorkerInvoicesPanel() {
                   onChange={(event) => setAmount(event.target.value)}
                 />
               </div>
-              <div className="file-field">
-                <span className="form-label" id="invoice-files-label">
+              <div className="is-full">
+                <span className="form-label">
                   Files
                   <RequiredMark />
                 </span>
-                <div className="file-picker">
-                  <input
-                    ref={fileInputRef}
-                    id="invoice-files"
-                    className="sr-only"
-                    type="file"
-                    accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"
-                    multiple
-                    disabled={busy}
-                    tabIndex={-1}
-                    onChange={(event) => {
-                      onPickFiles(event.target.files);
-                      event.target.value = "";
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    disabled={busy}
-                    aria-labelledby="invoice-files-label"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    Choose files
-                  </button>
-                  {files.length === 0 ? (
-                    <span className="file-picker-name">No file chosen</span>
-                  ) : (
-                    <div className="file-picker-files">
-                      {files.map((file) => (
-                        <div key={`${file.name}-${file.size}`} className="file-picker-row">
-                          <span className="file-picker-name">{file.name}</span>
-                          <button
-                            type="button"
-                            className="row-action"
-                            disabled={busy}
-                            onClick={() => setFiles((current) => current.filter((item) => item !== file))}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <FileUpload
+                  files={files}
+                  disabled={busy}
+                  maxFiles={maxFiles}
+                  maxBytes={maxBytes}
+                  onFilesChange={setFiles}
+                  onReject={setError}
+                />
               </div>
             </div>
-            <p className="invite-note">PDF, PNG, or JPG. Each file can be up to 10 MB.</p>
             <div className="timesheet-submit">
               <button className="btn-primary" type="submit" disabled={busy || !jobSiteId || files.length === 0}>
                 {busy ? "Uploading…" : "Submit invoice"}
@@ -280,7 +231,7 @@ export function WorkerInvoicesPanel() {
         )}
       </section>
 
-      <section className="saas-card stack-card">
+      <section className="worker-card">
         <h2 className="panel-title">Your invoices</h2>
         <p className="panel-copy">Invoices you have uploaded for {company}.</p>
         {invoices === undefined ? (
@@ -302,7 +253,7 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
       workerInvoiceColumns.columns([
         workerInvoiceColumns.accessor("jobSiteName", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
-          cell: ({ row }) => <TablePerson name={row.original.jobSiteName} />,
+          cell: ({ row }) => <TableName>{row.original.jobSiteName}</TableName>,
           sortFn: "text",
         }),
         workerInvoiceColumns.accessor("invoiceMonth", {
@@ -312,7 +263,7 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
         }),
         workerInvoiceColumns.accessor((row) => row.amount ?? 0, {
           id: "amount",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" align="end" />,
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" />,
           cell: ({ row }) =>
             row.original.amount === null ? (
               <TableMuted>No amount</TableMuted>
@@ -339,16 +290,26 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
             </div>
           ),
         }),
-        workerInvoiceColumns.accessor((row) => [row.status, row.rejectionReason].filter(Boolean).join(" "), {
-          id: "status",
+        workerInvoiceColumns.accessor("status", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
           cell: ({ row }) => (
             <TableStatus
               label={statusLabel(row.original.status)}
-              detail={row.original.rejectionReason}
-              tone={row.original.status === "rejected" ? "danger" : "default"}
+              tone={
+                row.original.status === "approved"
+                  ? "success"
+                  : row.original.status === "rejected"
+                    ? "danger"
+                    : "warning"
+              }
             />
           ),
+          sortFn: "text",
+        }),
+        workerInvoiceColumns.accessor((row) => row.rejectionReason ?? "", {
+          id: "rejectionReason",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Rejection reason" />,
+          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" />,
           sortFn: "text",
         }),
       ]),
@@ -359,8 +320,12 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
     <AppDataTable
       columns={columns}
       data={rows}
-      searchPlaceholder="Filter invoices..."
+      searchPlaceholder="Search invoices..."
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+      empty={{
+        title: "No invoices yet",
+        description: "Uploaded invoices will appear here once you submit them.",
+      }}
     />
   );
 }
@@ -375,15 +340,5 @@ function statusLabel(status: InvoiceStatus) {
 
 // Shows the invoice page for the signed-in worker.
 export function WorkerInvoicesPage() {
-  const workspace = useWorkspace();
-  const company = workspace.tenantName ?? "your company";
-
-  return (
-    <>
-      <header className="page-header">
-        <p className="page-description">Upload an invoice for a job site at {company}.</p>
-      </header>
-      <WorkerInvoicesPanel />
-    </>
-  );
+  return <WorkerInvoicesPanel />;
 }

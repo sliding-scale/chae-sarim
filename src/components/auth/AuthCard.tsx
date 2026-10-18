@@ -1,3 +1,5 @@
+import { Logo } from "@/components/brand/Logo";
+
 // Wraps a sign-in or sign-up form in the shared card layout.
 export function AuthCard({
   title,
@@ -12,12 +14,7 @@ export function AuthCard({
     <main className="auth-page">
       <section className="auth-card">
         <div className="auth-logo">
-          <a href="/" className="logo" aria-label="Chae home">
-            <span className="logo-mark" aria-hidden="true">
-              ◆
-            </span>
-            <span>Chae</span>
-          </a>
+          <Logo />
         </div>
         <h1 className="auth-title">{title}</h1>
         <p className="auth-copy">{description}</p>

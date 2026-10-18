@@ -49,11 +49,7 @@ const ThemeSwitch = ({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
         <SunIcon size={16} className="theme-switch-sun" />
       </span>
       <span className="theme-switch-icon theme-switch-icon-moon">
-        <MoonIcon
-          size={16}
-          fill={checked ? "#FFFFFF" : "#000000"}
-          className="theme-switch-moon"
-        />
+        <MoonIcon size={16} className="theme-switch-moon" />
       </span>
     </div>
   );

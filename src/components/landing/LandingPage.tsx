@@ -1,4 +1,5 @@
 import { AuthLink } from "@/components/auth/AuthLink";
+import { ChaeMark } from "@/components/brand/ChaeMark";
 import { MarketingFooter } from "@/components/layout/MarketingFooter";
 import { MarketingNavbar } from "@/components/layout/MarketingNavbar";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
@@ -71,7 +72,7 @@ export function LandingPage() {
                   <aside className="app-sidebar preview-sidebar">
                     <div className="sidebar-logo">
                       <span className="logo">
-                        <span className="logo-mark">◆</span>
+                        <ChaeMark className="logo-mark" />
                         <span className="logo-word">Chae</span>
                       </span>
                     </div>

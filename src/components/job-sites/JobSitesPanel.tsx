@@ -1,6 +1,7 @@
 "use client";
 
-import { AppDataTable, DataTableColumnHeader, TableMuted, TablePerson } from "@/components/lists/AppDataTable";
+import { JobSiteArt } from "@/components/dashboard/AdminArt";
+import { AppDataTable, DataTableColumnHeader, TableIconText, TableMuted, TableStatus } from "@/components/lists/AppDataTable";
 import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -10,6 +11,8 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
+import { UserAvatar } from "@/components/users/UserAvatar";
+import { MapPin, MapPinPlus } from "lucide-react";
 import { FormEvent, useMemo, useRef, useState } from "react";
 
 // Reads a user-facing message from a Convex error.
@@ -96,11 +99,16 @@ export function JobSitesPanel() {
 
   return (
     <>
-      <section className="saas-card invite-panel">
-        <h2 className="panel-title">Add a job site</h2>
-        <p className="panel-copy">
-          Add a place where workers at {company} record time. Assign each site to workers from the Workers page.
-        </p>
+      <section className="admin-hero is-site">
+        <div className="admin-hero-head">
+          <span className="admin-hero-icon">
+            <MapPinPlus aria-hidden="true" />
+          </span>
+          <div>
+            <h2 className="panel-title">Add a job site</h2>
+            <p className="panel-copy">Where workers at {company} record time.</p>
+          </div>
+        </div>
         <form className="site-form" onSubmit={onCreate} noValidate>
           <div>
             <label className="form-label" htmlFor="site-name">
@@ -145,9 +153,10 @@ export function JobSitesPanel() {
             </p>
           ) : null}
         </form>
+        <JobSiteArt />
       </section>
 
-      <section className="saas-card stack-card">
+      <section className="admin-table-card">
         <h2 className="panel-title">Job sites</h2>
         <p className="panel-copy">Sites for {company}. A site that already has records cannot be removed.</p>
         {sites === undefined ? (
@@ -176,9 +185,25 @@ type SiteRow = {
   jobSiteId: Id<"jobSites">;
   name: string;
   address: string | null;
+  workers: { name: string }[];
 };
 
 const siteColumns = createColumnHelper<DataTableFeatures, SiteRow>();
+
+// Shows a job site as coloured initials beside its name.
+function SiteName({ name }: { name: string }) {
+  const initials = name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+  return (
+    <span className="table-person">
+      <span className="site-initials">{initials || "?"}</span>
+      <span className="table-person-name">{name}</span>
+    </span>
+  );
+}
 
 // Renders job sites with inline editing and remove actions.
 function SiteTable({
@@ -241,19 +266,16 @@ function SiteTable({
             const state = stateRef.current;
             const editing = state.editingId === row.original.jobSiteId;
             const busy = state.busyKey === row.original.jobSiteId;
-            if (!editing) return <TablePerson name={row.original.name} />;
+            if (!editing) return <SiteName name={row.original.name} />;
             return (
-              <label className="form-label" htmlFor={`site-name-${row.original.jobSiteId}`}>
-                Name
-                <RequiredMark />
-                <input
-                  id={`site-name-${row.original.jobSiteId}`}
-                  className="input-saas"
-                  value={state.editName}
-                  disabled={busy}
-                  onChange={(event) => state.onEditName(event.target.value)}
-                />
-              </label>
+              <input
+                id={`site-name-${row.original.jobSiteId}`}
+                className="input-saas table-edit-input"
+                aria-label="Name"
+                value={state.editName}
+                disabled={busy}
+                onChange={(event) => state.onEditName(event.target.value)}
+              />
             );
           },
         }),
@@ -265,10 +287,16 @@ function SiteTable({
             const state = stateRef.current;
             const editing = state.editingId === row.original.jobSiteId;
             const busy = state.busyKey === row.original.jobSiteId;
-            if (!editing) return <TableMuted>{row.original.address || "No address"}</TableMuted>;
+            if (!editing) {
+              return row.original.address ? (
+                <TableIconText icon={MapPin}>{row.original.address}</TableIconText>
+              ) : (
+                <TableMuted>No address</TableMuted>
+              );
+            }
             return (
               <input
-                className="input-saas"
+                className="input-saas table-edit-input"
                 aria-label={`Address for ${row.original.name}`}
                 value={state.editAddress}
                 placeholder="Optional"
@@ -278,8 +306,34 @@ function SiteTable({
             );
           },
         }),
+        siteColumns.accessor((row) => row.workers.map((worker) => worker.name).join(", "), {
+          id: "workers",
+          header: "Assigned workers",
+          enableSorting: false,
+          cell: ({ row }) => {
+            const people = row.original.workers;
+            if (people.length === 0) return <TableMuted>None assigned</TableMuted>;
+            const shown = people.slice(0, 4);
+            const extra = people.length - shown.length;
+            return (
+              <span className="admin-faces">
+                {shown.map((worker, index) => (
+                  <UserAvatar key={`${worker.name}-${index}`} name={worker.name} />
+                ))}
+                {extra > 0 ? <span className="admin-faces-more">+{extra}</span> : null}
+              </span>
+            );
+          },
+        }),
+        siteColumns.display({
+          id: "status",
+          header: "Status",
+          enableSorting: false,
+          cell: () => <TableStatus label="Active" tone="success" />,
+        }),
         siteColumns.display({
           id: "actions",
+          header: "Actions",
           enableSorting: false,
           enableGlobalFilter: false,
           cell: ({ row }) => {
@@ -324,7 +378,17 @@ function SiteTable({
     [],
   );
 
-  return <AppDataTable columns={columns} data={rows} searchPlaceholder="Filter by name or address..." />;
+  return (
+    <AppDataTable
+      columns={columns}
+      data={rows}
+      searchPlaceholder="Filter by name or address..."
+      empty={{
+        title: "No job sites yet",
+        description: "Job sites you add will appear here.",
+      }}
+    />
+  );
 }
 
 // Shows the job site page for the signed-in admin's company.

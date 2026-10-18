@@ -1,14 +1,24 @@
 "use client";
 
-import { AppDataTable, DataTableColumnHeader, TableFigure, TableMuted, TablePerson, TableStatus, emailHandle } from "@/components/lists/AppDataTable";
+import { ReviewBoard } from "@/components/dashboard/ReviewBoard";
+import {
+  AppDataTable,
+  DataTableColumnHeader,
+  TableFigure,
+  TableIconText,
+  TableLongText,
+  TableMuted,
+  TablePerson,
+  TableStatus,
+} from "@/components/lists/AppDataTable";
 import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
+import { CalendarDays, FileText, MapPin } from "lucide-react";
 import { useMemo, useState } from "react";
 
 type InvoiceStatus = "pending" | "approved" | "rejected";
@@ -54,8 +64,6 @@ function formatAmount(amount: number | null) {
 
 // Lets an admin review submitted invoices and approve or reject the ones still pending.
 export function InvoicesPanel() {
-  const workspace = useWorkspace();
-  const company = workspace.tenantName ?? "this company";
   const invoices = useQuery(api.invoices.queries.listInvoices);
   const decideInvoice = useMutation(api.invoices.mutations.decideInvoice);
   const [error, setError] = useState("");
@@ -90,21 +98,13 @@ export function InvoicesPanel() {
   }
 
   return (
-    <>
-      <section className="saas-card invite-panel">
-        <h2 className="panel-title">Invoices</h2>
-        <p className="panel-copy">
-          Invoices workers at {company} have uploaded. Approving or rejecting a pending invoice records that
-          decision.
-        </p>
-        {error ? <p className="field-error">{error}</p> : null}
-        {rows === undefined ? (
-          <p className="invite-note">Loading invoices…</p>
-        ) : (
-          <InvoiceTable rows={rows} busyId={busyId} onDecide={onDecide} />
-        )}
-      </section>
-    </>
+    <ReviewBoard title="Submitted Invoices" noun="invoices" rows={rows} error={error}>
+      {rows === undefined ? (
+        <p className="invite-note">Loading invoices…</p>
+      ) : (
+        <InvoiceTable rows={rows} busyId={busyId} onDecide={onDecide} />
+      )}
+    </ReviewBoard>
   );
 }
 
@@ -126,26 +126,21 @@ function InvoiceTable({
         invoiceColumns.accessor((row) => `${row.workerName} ${row.workerEmail}`, {
           id: "worker",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Worker" />,
-          cell: ({ row }) => (
-            <TablePerson
-              name={row.original.workerName}
-              detail={row.original.workerEmail ? emailHandle(row.original.workerEmail) : "No email on file"}
-            />
-          ),
+          cell: ({ row }) => <TablePerson name={row.original.workerName} />,
           sortFn: "text",
         }),
         invoiceColumns.accessor("jobSiteName", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
-          cell: ({ row }) => <TableMuted>{row.original.jobSiteName}</TableMuted>,
+          cell: ({ row }) => <TableIconText icon={MapPin}>{row.original.jobSiteName}</TableIconText>,
           sortFn: "text",
         }),
         invoiceColumns.accessor("invoiceMonth", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Month" />,
-          cell: ({ row }) => <TableMuted>{formatMonth(row.original.invoiceMonth)}</TableMuted>,
+          cell: ({ row }) => <TableIconText icon={CalendarDays}>{formatMonth(row.original.invoiceMonth)}</TableIconText>,
           sortFn: "alphanumeric",
         }),
         invoiceColumns.accessor("amount", {
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" align="end" />,
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" />,
           cell: ({ row }) =>
             row.original.amount === null ? (
               <TableMuted>No amount</TableMuted>
@@ -160,22 +155,27 @@ function InvoiceTable({
           cell: ({ row }) => <InvoiceFiles files={row.original.files} />,
           enableSorting: false,
         }),
-        invoiceColumns.accessor((row) => [row.status, row.rejectionReason].filter(Boolean).join(" "), {
-          id: "status",
+        invoiceColumns.accessor("status", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
           cell: ({ row }) => (
             <TableStatus
               label={statusLabel(row.original.status)}
-              detail={row.original.rejectionReason}
-              tone={row.original.status === "rejected" ? "danger" : "default"}
+              tone={row.original.status === "approved" ? "success" : row.original.status === "rejected" ? "danger" : "warning"}
             />
           ),
+          sortFn: "text",
+        }),
+        invoiceColumns.accessor((row) => row.rejectionReason ?? "", {
+          id: "rejectionReason",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Rejection reason" />,
+          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" />,
           sortFn: "text",
         }),
         ...(onDecide
           ? [
               invoiceColumns.display({
                 id: "actions",
+                header: "Actions",
                 enableSorting: false,
                 enableGlobalFilter: false,
                 cell: ({ row }) => {
@@ -208,8 +208,12 @@ function InvoiceTable({
     <AppDataTable
       columns={columns}
       data={rows}
-      searchPlaceholder="Filter invoices..."
+      searchPlaceholder="Search by worker or site..."
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+      empty={{
+        title: "No invoices yet",
+        description: "When workers upload invoices, they will appear here for your review.",
+      }}
     />
   );
 }
@@ -221,11 +225,15 @@ function InvoiceFiles({ files }: { files: InvoiceFile[] }) {
     <span className="file-links">
       {files.map((file, index) =>
         file.url ? (
-          <a key={`${file.fileName}-${index}`} className="row-action" href={file.url} target="_blank" rel="noreferrer">
+          <a key={`${file.fileName}-${index}`} className="file-pill" href={file.url} target="_blank" rel="noreferrer">
+            <FileText size={14} aria-hidden="true" />
             {file.fileName}
           </a>
         ) : (
-          <span key={`${file.fileName}-${index}`}>{file.fileName}</span>
+          <span key={`${file.fileName}-${index}`} className="file-pill">
+            <FileText size={14} aria-hidden="true" />
+            {file.fileName}
+          </span>
         ),
       )}
     </span>
