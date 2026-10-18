@@ -9,7 +9,7 @@ export function SsoCallback() {
 
   return (
     <main className="auth-page">
-      <section className="auth-card" style={{ textAlign: "center" }}>
+      <section className="auth-card setup-card">
         <HandleSSOCallback
           navigateToApp={({ decorateUrl }) => {
             window.location.assign(decorateUrl("/dashboard"));
@@ -17,7 +17,7 @@ export function SsoCallback() {
           navigateToSignIn={() => router.push("/sign-in")}
           navigateToSignUp={() => router.push("/sign-up")}
         />
-        <p className="auth-copy">Finishing sign-in…</p>
+        <p className="auth-copy">Taking you to your dashboard…</p>
       </section>
     </main>
   );

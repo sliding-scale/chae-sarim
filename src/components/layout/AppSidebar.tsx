@@ -6,7 +6,7 @@ import ThemeSwitch from "@/components/ui/theme-switch";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { homeFor, navigationFor, type AppRole } from "@/lib/navigation";
 import { SignOutButton, useUser } from "@clerk/nextjs";
-import { Building2, ChevronRight, LogOut, User } from "lucide-react";
+import { ChevronUp, LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -38,6 +38,19 @@ export function AppSidebar({
   const profileHref = role === "admin" ? "/dashboard/admin/profile" : "/dashboard/worker/profile";
 
   useEffect(() => {
+    const current = document.querySelector<HTMLElement>(".sidebar-link-active");
+    const nav = current?.closest<HTMLElement>(".sidebar-nav");
+    if (!current || !nav) return;
+    const navRect = nav.getBoundingClientRect();
+    const linkRect = current.getBoundingClientRect();
+    if (linkRect.bottom > navRect.bottom) {
+      nav.scrollTop += linkRect.bottom - navRect.bottom + 8;
+    } else if (linkRect.top < navRect.top) {
+      nav.scrollTop -= navRect.top - linkRect.top + 8;
+    }
+  }, [pathname]);
+
+  useEffect(() => {
     // Closes the account menu when the pointer lands outside it.
     function onPointer(event: MouseEvent) {
       if (!accountRef.current?.contains(event.target as Node)) setAccountOpen(false);
@@ -65,7 +78,7 @@ export function AppSidebar({
       {tenantName ? (
         <div className="sidebar-workspace">
           <span className="sidebar-workspace-mark" aria-hidden="true">
-            {tenantImageUrl ? <CompanyMark imageUrl={tenantImageUrl} size={22} /> : <Building2 size={22} />}
+            <CompanyMark imageUrl={tenantImageUrl} size={22} />
           </span>
           <span className="sidebar-workspace-copy">
             <span>Workspace</span>
@@ -86,7 +99,6 @@ export function AppSidebar({
                   key={item.href}
                   href={item.href}
                   className={active ? "sidebar-link sidebar-link-active" : "sidebar-link"}
-                  aria-label={item.label}
                   aria-current={active ? "page" : undefined}
                   onClick={onNavigate}
                 >
@@ -114,7 +126,7 @@ export function AppSidebar({
             <strong>{name}</strong>
             <span>{role === "admin" ? "Administrator" : "Worker"}</span>
           </span>
-          <ChevronRight className="sidebar-footer-chevron" size={18} aria-hidden="true" />
+          <ChevronUp className="sidebar-footer-chevron" size={18} aria-hidden="true" />
         </button>
         {accountOpen ? (
           <div className="sidebar-menu" role="menu">

@@ -82,12 +82,12 @@ export default defineSchema({
     fileStorageId: v.id("_storage"),
     fileName: v.optional(v.string()),
     invoiceFiles: v.optional(
-        v.array(
-            v.object({
-                fileStorageId: v.id("_storage"),
-                fileName: v.optional(v.string()),
-            }),
-        ),
+      v.array(
+        v.object({
+          fileStorageId: v.id("_storage"),
+          fileName: v.optional(v.string()),
+        }),
+      ),
     ),
     invoiceMonth: v.string(),
     jobSiteId: v.id("jobSites"),

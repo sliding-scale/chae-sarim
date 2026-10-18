@@ -3,11 +3,12 @@ import { query } from "../_generated/server";
 import {
   daysInsideMonth,
   homeWindow,
+  decidedThisWeek,
+  hoursInMonth,
   jobSiteLabel,
   monthWindow,
   requireAdmin,
   requireWorker,
-  totalHours,
   workerLabel,
 } from "../lib";
 
@@ -402,19 +403,20 @@ export const getAdminHome = query({
     }
     workers.sort((a, b) => a.name.localeCompare(b.name));
 
-    // Counts a decision when it landed in the caller's current local week.
-    function decidedThisWeek(updatedAt: number) {
-      return updatedAt >= window.weekStartMs && updatedAt < window.weekEndMs;
-    }
-
     return {
       jobSites: jobSites.length,
       pendingTimesheets: pendingTimesheets.length,
       pendingInvoices: pendingInvoices.length,
       pendingHolidays: pendingHolidays.length,
-      approvedTimesheets: approvedTimesheets.filter((row) => decidedThisWeek(row.updatedAt)).length,
-      approvedInvoices: approvedInvoices.filter((row) => decidedThisWeek(row.updatedAt)).length,
-      approvedHolidays: approvedHolidays.filter((row) => decidedThisWeek(row.updatedAt)).length,
+      approvedTimesheets: approvedTimesheets.filter((row) =>
+        decidedThisWeek(row.updatedAt, window.weekStartMs, window.weekEndMs),
+      ).length,
+      approvedInvoices: approvedInvoices.filter((row) =>
+        decidedThisWeek(row.updatedAt, window.weekStartMs, window.weekEndMs),
+      ).length,
+      approvedHolidays: approvedHolidays.filter((row) =>
+        decidedThisWeek(row.updatedAt, window.weekStartMs, window.weekEndMs),
+      ).length,
       workerCount: workers.length,
       team: workers.slice(0, teamPreview),
     };
@@ -478,8 +480,8 @@ export const getWorkerHome = query({
     for (const timesheet of timesheets) {
       if (timesheet.tenantId !== tenantId) continue;
       if (timesheetStatus === null) timesheetStatus = timesheet.status;
-      if (timesheet.weekStart.slice(0, 7) === window.month && timesheet.status !== "rejected") {
-        hoursLogged += totalHours(timesheet.hours);
+      if (timesheet.status !== "rejected") {
+        hoursLogged += hoursInMonth(timesheet.hours, timesheet.weekStart, window.month);
       }
     }
 

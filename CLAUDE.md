@@ -47,6 +47,6 @@ Add a short comment above every function you create, saying what it does.
 
 ## Schema
 
-The tables in `convex/schema.ts` are in place: `users`, `tenants`, `memberships`, `invites`, `jobSites`, `timesheets`, `workerInvoices`, and `holidayRequests`. There is no Scanner role, QR check-in, or attendance table.
+The tables in `convex/schema.ts` are in place: `users`, `tenants`, `memberships`, `invites`, `jobSites`, `jobSiteAssignments`, `timesheets`, `workerInvoices`, `holidayRequests`, and `notifications`. There is no Scanner role, QR check-in, or attendance table.
 
 Dates are `YYYY-MM-DD` strings. `invoiceMonth` is `YYYY-MM`. `updatedAt` is a number from `Date.now()`. Timesheet status includes `draft`.

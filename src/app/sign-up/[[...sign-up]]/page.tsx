@@ -3,6 +3,8 @@ import { SsoCallback } from "@/components/auth/SsoCallback";
 import { resumeSession } from "@/lib/resume-session";
 import { Suspense } from "react";
 
+export const metadata = { title: "Sign up" };
+
 // This page checks for an open session, so navigation into it is allowed to block.
 export const instant = false;
 

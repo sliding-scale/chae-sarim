@@ -336,7 +336,7 @@ export function companyPhone(value: string) {
 }
 
 const companyImageBytes = 5 * 1024 * 1024;
-const companyImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const companyImageTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 // Rejects an uploaded photo that is missing, too large, or not an image.
 async function requireImageFile(ctx: MutationCtx, imageStorageId: Id<"_storage">, missing: string) {
@@ -344,7 +344,7 @@ async function requireImageFile(ctx: MutationCtx, imageStorageId: Id<"_storage">
   if (!meta) throw new ConvexError(missing);
   if (meta.size > companyImageBytes) throw new ConvexError("Choose a photo smaller than 5 MB.");
   if (!meta.contentType || !companyImageTypes.has(meta.contentType)) {
-    throw new ConvexError("Upload a PNG, JPG, WEBP, or GIF.");
+    throw new ConvexError("Upload a PNG, JPG, or WebP.");
   }
 }
 
@@ -451,6 +451,23 @@ export function totalHours(hours: DayHours) {
     hours.saturday +
     hours.sunday
   );
+}
+
+// Counts the hours from a Monday-start week that fall inside a YYYY-MM month.
+export function hoursInMonth(hours: DayHours, weekStart: string, month: string) {
+  const match = datePattern.exec(weekStart);
+  if (!match) return 0;
+  const start = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return dayKeys.reduce((sum, key, index) => {
+    const date = new Date(start + index * dayMs);
+    const label = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+    return label === month ? sum + hours[key] : sum;
+  }, 0);
+}
+
+// Counts a decision when its timestamp falls inside a half-open week window.
+export function decidedThisWeek(updatedAt: number, weekStartMs: number, weekEndMs: number) {
+  return updatedAt >= weekStartMs && updatedAt < weekEndMs;
 }
 
 // Returns the name and email stored for a Clerk user, with a fallback when the row is missing.
@@ -1092,23 +1109,18 @@ const sampleInvoiceFileNames = [
   "sofia-malir-aug.pdf",
   "lucas-korangi-aug.pdf",
   "malik-orangi-jul.pdf",
-  "sarim-clifton-oct.pdf",
-  "sarim-dha-sep.pdf",
-  "sarim-dha-sep-receipt.pdf",
-  "sarim-korangi-aug.pdf",
-  "sarim-site1-jul.pdf",
-  "sarim-korangi-sep.pdf",
-  "sarim-clifton-aug.pdf",
+  "amina-clifton-oct.pdf",
+  "amina-dha-sep.pdf",
+  "amina-dha-sep-receipt.pdf",
+  "amina-korangi-aug.pdf",
+  "amina-site1-jul.pdf",
+  "amina-korangi-sep.pdf",
+  "amina-clifton-aug.pdf",
 ];
 
 // Returns the sample invoice file names that need a stored PDF.
 export function listSampleInvoiceFileNames() {
   return sampleInvoiceFileNames;
-}
-
-// Returns only Sarim YT's sample invoice file names.
-export function listSarimInvoiceFileNames() {
-  return sampleInvoiceFileNames.filter((fileName) => fileName.startsWith("sarim-"));
 }
 
 // Assigns sample workers to job sites and inserts timesheets, invoices, and holiday requests.
@@ -1191,9 +1203,9 @@ export async function seedSampleActivity(
     ["seed_worker_19", "Site 1"],
     ["seed_worker_20", "SITE Area"],
     ["seed_worker_20", "Orangi Town"],
-    ["user_3KlzGyq6huxq3rs1GOLeATV2GsU", "Clifton Block 5"],
-    ["user_3KlzGyq6huxq3rs1GOLeATV2GsU", "DHA Phase 6"],
-    ["user_3KlzGyq6huxq3rs1GOLeATV2GsU", "Korangi Industrial"],
+    ["seed_worker_01", "Clifton Block 5"],
+    ["seed_worker_01", "DHA Phase 6"],
+    ["seed_worker_01", "Korangi Industrial"],
   ];
 
   let assignmentsAdded = 0;
@@ -1230,12 +1242,12 @@ export async function seedSampleActivity(
     { clerkId: "seed_worker_09", site: "Malir Cantt", weekStart: "2026-08-10", weekEnd: "2026-08-16", hours: shortWeek, comments: "Left early on Wednesday.", status: "rejected", rejectionReason: "Wednesday hours belong on Defence View, not Malir." },
     { clerkId: "seed_worker_06", site: "Korangi Industrial", weekStart: "2026-08-03", weekEnd: "2026-08-09", hours: overtime, comments: "Claiming the full overtime week.", status: "rejected", rejectionReason: longTimesheetRejection },
     { clerkId: "seed_worker_12", site: "Orangi Town", weekStart: "2026-07-27", weekEnd: "2026-08-02", hours: mixedHours, comments: "Please see the attached site note about the delayed concrete delivery.", status: "rejected", rejectionReason: "The Saturday half day was not authorised, and the Tuesday entry of 7.25 hours does not match the 6 hours on the gate log. Remove Saturday, correct Tuesday, and resubmit. The rest of the week is fine, but we cannot approve a timesheet that still includes unauthorised weekend time or a day that disagrees with the attendance record." },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "DHA Phase 6", weekStart: "2026-10-12", weekEnd: "2026-10-18", hours: shortWeek, comments: "Left after the concrete delivery on Wednesday.", status: "pending", rejectionReason: "" },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Clifton Block 5", weekStart: "2026-10-05", weekEnd: "2026-10-11", hours: weekday, comments: "Regular week on the Clifton fit-out.", status: "pending", rejectionReason: "" },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Korangi Industrial", weekStart: "2026-09-28", weekEnd: "2026-10-04", hours: overtime, comments: "Overtime agreed for the panel changeover.", status: "approved", rejectionReason: "" },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Site 1", weekStart: "2026-09-21", weekEnd: "2026-09-27", hours: decimals, comments: "Half-hour lunch deducted each weekday.", status: "approved", rejectionReason: "" },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "DHA Phase 6", weekStart: "2026-09-14", weekEnd: "2026-09-20", hours: weekday, comments: "", status: "rejected", rejectionReason: shortRejection },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Clifton Block 5", weekStart: "2026-09-07", weekEnd: "2026-09-13", hours: overtime, comments: "Claiming the full overtime week.", status: "rejected", rejectionReason: longTimesheetRejection },
+    { clerkId: "seed_worker_01", site: "DHA Phase 6", weekStart: "2026-10-12", weekEnd: "2026-10-18", hours: shortWeek, comments: "Left after the concrete delivery on Wednesday.", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_01", site: "Clifton Block 5", weekStart: "2026-10-05", weekEnd: "2026-10-11", hours: weekday, comments: "Regular week on the Clifton fit-out.", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_01", site: "Korangi Industrial", weekStart: "2026-09-28", weekEnd: "2026-10-04", hours: overtime, comments: "Overtime agreed for the panel changeover.", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_01", site: "Site 1", weekStart: "2026-09-21", weekEnd: "2026-09-27", hours: decimals, comments: "Half-hour lunch deducted each weekday.", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_01", site: "DHA Phase 6", weekStart: "2026-09-14", weekEnd: "2026-09-20", hours: weekday, comments: "", status: "rejected", rejectionReason: shortRejection },
+    { clerkId: "seed_worker_01", site: "Clifton Block 5", weekStart: "2026-09-07", weekEnd: "2026-09-13", hours: overtime, comments: "Claiming the full overtime week.", status: "rejected", rejectionReason: longTimesheetRejection },
   ];
 
   let timesheetsAdded = 0;
@@ -1282,12 +1294,12 @@ export async function seedSampleActivity(
     { clerkId: "seed_worker_09", site: "Malir Cantt", invoiceMonth: "2026-08", amount: 27500, fileName: "sofia-malir-aug.pdf", status: "rejected", rejectionReason: "Wrong job site. Resubmit this against Defence View." },
     { clerkId: "seed_worker_06", site: "Korangi Industrial", invoiceMonth: "2026-08", amount: 98000, fileName: "lucas-korangi-aug.pdf", status: "rejected", rejectionReason: longInvoiceRejection },
     { clerkId: "seed_worker_12", site: "Orangi Town", invoiceMonth: "2026-07", amount: 73250.5, fileName: "malik-orangi-jul.pdf", status: "rejected", rejectionReason: "The PDF total is 73,250.50 but the line items add up to 68,100. The materials row looks duplicated from June, and there is no receipt for the 5,150 transport charge. Please send a corrected PDF with the duplicate row removed and the transport receipt attached as a second file. We will review it again once both files are on the same invoice." },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Clifton Block 5", invoiceMonth: "2026-10", amount: 42000, fileName: "sarim-clifton-oct.pdf", status: "pending", rejectionReason: "" },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "DHA Phase 6", invoiceMonth: "2026-09", amount: 42500.75, fileName: "sarim-dha-sep.pdf", extraFileName: "sarim-dha-sep-receipt.pdf", status: "pending", rejectionReason: "" },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Korangi Industrial", invoiceMonth: "2026-08", amount: 64000, fileName: "sarim-korangi-aug.pdf", status: "approved", rejectionReason: "" },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Site 1", invoiceMonth: "2026-07", amount: 18500, fileName: "sarim-site1-jul.pdf", status: "approved", rejectionReason: "" },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Korangi Industrial", invoiceMonth: "2026-09", amount: 54000, fileName: "sarim-korangi-sep.pdf", status: "rejected", rejectionReason: "The invoice total does not match the approved hours." },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Clifton Block 5", invoiceMonth: "2026-08", amount: 98000, fileName: "sarim-clifton-aug.pdf", status: "rejected", rejectionReason: longInvoiceRejection },
+    { clerkId: "seed_worker_01", site: "Clifton Block 5", invoiceMonth: "2026-10", amount: 42000, fileName: "amina-clifton-oct.pdf", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_01", site: "DHA Phase 6", invoiceMonth: "2026-09", amount: 42500.75, fileName: "amina-dha-sep.pdf", extraFileName: "amina-dha-sep-receipt.pdf", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_01", site: "Korangi Industrial", invoiceMonth: "2026-08", amount: 64000, fileName: "amina-korangi-aug.pdf", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_01", site: "Site 1", invoiceMonth: "2026-07", amount: 18500, fileName: "amina-site1-jul.pdf", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_01", site: "Korangi Industrial", invoiceMonth: "2026-09", amount: 54000, fileName: "amina-korangi-sep.pdf", status: "rejected", rejectionReason: "The invoice total does not match the approved hours." },
+    { clerkId: "seed_worker_01", site: "Clifton Block 5", invoiceMonth: "2026-08", amount: 98000, fileName: "amina-clifton-aug.pdf", status: "rejected", rejectionReason: longInvoiceRejection },
   ];
 
   let invoicesAdded = 0;
@@ -1356,12 +1368,12 @@ export async function seedSampleActivity(
     { clerkId: "seed_worker_09", site: "Malir Cantt", startDate: "2026-12-14", endDate: "2026-12-18", reason: "Travel.", status: "rejected", rejectionReason: "Please request this on Defence View instead." },
     { clerkId: "seed_worker_06", site: "Korangi Industrial", startDate: "2026-12-01", endDate: "2026-12-05", reason: "Sister's wedding.", status: "rejected", rejectionReason: longHolidayRejection },
     { clerkId: "seed_worker_12", site: "Orangi Town", startDate: "2026-12-07", endDate: "2026-12-12", reason: longHolidayReason, status: "rejected", rejectionReason: "The slab pour is booked for 8 and 9 December, and you are the only person signed off to run it. We can approve 11 and 12 December if you resubmit those two days on their own. The longer request cannot be covered, and the site cannot pause the pour for a full week." },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "DHA Phase 6", startDate: "2026-10-19", endDate: "2026-10-19", reason: "Clinic appointment.", status: "pending", rejectionReason: "" },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Korangi Industrial", startDate: "2026-12-21", endDate: "2026-12-31", reason: longPendingHolidayReason, status: "pending", rejectionReason: "" },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "DHA Phase 6", startDate: "2026-10-26", endDate: "2026-10-27", reason: "Medical appointment and recovery day.", status: "approved", rejectionReason: "" },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Site 1", startDate: "2026-09-01", endDate: "2026-09-04", reason: "Already taken. Logged after the fact.", status: "approved", rejectionReason: "" },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Korangi Industrial", startDate: "2026-11-09", endDate: "2026-11-11", reason: "Family visit.", status: "rejected", rejectionReason: "That week is already fully staffed." },
-    { clerkId: "user_3KlzGyq6huxq3rs1GOLeATV2GsU", site: "Clifton Block 5", startDate: "2026-12-01", endDate: "2026-12-05", reason: longHolidayReason, status: "rejected", rejectionReason: longHolidayRejection },
+    { clerkId: "seed_worker_01", site: "DHA Phase 6", startDate: "2026-10-19", endDate: "2026-10-19", reason: "Clinic appointment.", status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_01", site: "Korangi Industrial", startDate: "2026-12-21", endDate: "2026-12-31", reason: longPendingHolidayReason, status: "pending", rejectionReason: "" },
+    { clerkId: "seed_worker_01", site: "DHA Phase 6", startDate: "2026-10-26", endDate: "2026-10-27", reason: "Medical appointment and recovery day.", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_01", site: "Site 1", startDate: "2026-09-01", endDate: "2026-09-04", reason: "Already taken. Logged after the fact.", status: "approved", rejectionReason: "" },
+    { clerkId: "seed_worker_01", site: "Korangi Industrial", startDate: "2026-11-09", endDate: "2026-11-11", reason: "Family visit.", status: "rejected", rejectionReason: "That week is already fully staffed." },
+    { clerkId: "seed_worker_01", site: "Clifton Block 5", startDate: "2026-12-01", endDate: "2026-12-05", reason: longHolidayReason, status: "rejected", rejectionReason: longHolidayRejection },
   ];
 
   let holidaysAdded = 0;

@@ -3,12 +3,14 @@
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
-// Reapplies the saved theme after navigation. The landing page stays light.
+const publicPaths = new Set(["/", "/documentation", "/privacy", "/terms"]);
+
+// Reapplies the saved theme after navigation. Public pages stay light together.
 export function ThemeSync() {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (pathname === "/") {
+    if (publicPaths.has(pathname)) {
       delete document.documentElement.dataset.theme;
       return;
     }

@@ -1,25 +1,17 @@
 "use client";
 
-import { AppDataTable, DataTableColumnHeader, TableMuted } from "@/components/lists/AppDataTable";
-import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { homeWindow } from "@/lib/home-window";
 import { useGreeting } from "@/lib/use-greeting";
 import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
-import { createColumnHelper } from "@tanstack/react-table";
 import { useQuery } from "convex/react";
-import { CalendarDays, FileText, Plane, Users } from "lucide-react";
+import { CalendarOff, ClipboardList, Clock3, FileText, MapPin } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-type SiteRow = {
-  jobSiteId: Id<"jobSites">;
-  name: string;
-  address: string | null;
-};
+const siteTones = ["green", "blue", "amber", "purple"] as const;
 
-const siteColumns = createColumnHelper<DataTableFeatures, SiteRow>();
+type ActivityStatus = "draft" | "pending" | "approved" | "rejected" | null;
 
 // Shows the signed-in worker's shortcuts, job sites, and this month.
 export function WorkerDashboardPage() {
@@ -34,68 +26,100 @@ export function WorkerDashboardPage() {
 
   return (
     <div className="home-worker">
-      <header className="home-hero">
-        <div className="home-greeting">
-          <h1 suppressHydrationWarning>
-            {greeting}! <span className="home-wave">👋</span>
-          </h1>
-          <p>Here&apos;s your overview for this month.</p>
-        </div>
+      <header className="home-greeting">
+        <h1 suppressHydrationWarning>
+          {greeting}! <span className="home-wave">👋</span>
+        </h1>
+        <p>Here&apos;s your overview for this month.</p>
       </header>
 
       <section className="home-stats" aria-label="Quick actions">
         <Link className="home-stat is-green" href="/dashboard/worker/timesheets">
           <span className="home-bubble">
-            <CalendarDays aria-hidden="true" />
+            <ClipboardList aria-hidden="true" />
           </span>
-          <p>Upload Timesheet</p>
-          <small>Submit your hours for approval</small>
+          <p>Submit a timesheet</p>
+          <small>Record your hours for approval</small>
         </Link>
         <Link className="home-stat" href="/dashboard/worker/invoices">
           <span className="home-bubble">
             <FileText aria-hidden="true" />
           </span>
-          <p>Upload Invoice</p>
+          <p>Upload an invoice</p>
           <small>Add your invoice for review</small>
         </Link>
         <Link className="home-stat is-amber" href="/dashboard/worker/holidays">
           <span className="home-bubble">
-            <Plane aria-hidden="true" />
+            <CalendarOff aria-hidden="true" />
           </span>
-          <p>Request Holiday</p>
-          <small>Plan your time off</small>
+          <p>Request a holiday</p>
+          <small>Ask for days away from a job site</small>
         </Link>
       </section>
 
       <section className="home-lower">
         <article className="home-panel">
-          <h2>Your Job Sites</h2>
+          <header className="home-panel-header">
+            <div className="home-heading-group">
+              <span className="home-round">
+                <MapPin aria-hidden="true" />
+              </span>
+              <h2>Your job sites</h2>
+            </div>
+          </header>
           {home === undefined ? (
             <p className="home-note">Loading job sites…</p>
+          ) : home.sites.length === 0 ? (
+            <p className="home-note">Assigned job sites will appear here.</p>
           ) : (
-            <div className="home-sites-table">
-              <SiteTable rows={home.sites} />
+            <div className="home-site-list">
+              {home.sites.map((site) => (
+                <span key={site.jobSiteId} className="home-site-pill">
+                  <i className={`is-${siteTone(site.name)}`} />
+                  {site.name}
+                </span>
+              ))}
             </div>
           )}
         </article>
         <article className="home-panel">
-          <h2>This Month Summary</h2>
+          <header className="home-panel-header">
+            <div className="home-heading-group">
+              <span className="home-round">
+                <ClipboardList aria-hidden="true" />
+              </span>
+              <h2>Recent activity</h2>
+            </div>
+          </header>
+          <ActivityRow tone="timesheet" icon={ClipboardList} label="Timesheet" status={home?.timesheetStatus ?? null} ready={home !== undefined} />
+          <ActivityRow tone="invoice" icon={FileText} label="Invoice" status={home?.invoiceStatus ?? null} ready={home !== undefined} />
+          <ActivityRow tone="holiday" icon={CalendarOff} label="Holiday" status={home?.holidayStatus ?? null} ready={home !== undefined} />
+        </article>
+        <article className="home-panel">
+          <header className="home-panel-header">
+            <div className="home-heading-group">
+              <span className="home-round">
+                <Clock3 aria-hidden="true" />
+              </span>
+              <h2>This month</h2>
+            </div>
+          </header>
           <SummaryRow
             tone="hours"
-            icon={Users}
-            label="Hours Logged"
-            value={home ? String(Number(home.hoursLogged.toFixed(2))) : "—"}
+            icon={Clock3}
+            label="Hours logged"
+            value={home ? `${Number(home.hoursLogged.toFixed(2))} h` : "—"}
           />
           <SummaryRow
             tone="invoice"
             icon={FileText}
-            label="Invoices Submitted"
+            label="Invoices submitted"
             value={home ? String(home.invoicesSubmitted) : "—"}
           />
           <SummaryRow
             tone="holiday"
-            icon={Plane}
-            label="Holiday Days"
+            icon={CalendarOff}
+            label="Holiday days"
             value={home ? (holidayDays === 1 ? "1 day" : `${holidayDays} days`) : "—"}
           />
         </article>
@@ -104,36 +128,44 @@ export function WorkerDashboardPage() {
   );
 }
 
-// Lists the worker's assigned job sites with paging.
-function SiteTable({ rows }: { rows: SiteRow[] }) {
-  const columns = useMemo(
-    () =>
-      siteColumns.columns([
-        siteColumns.accessor("name", {
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
-          cell: ({ row }) => <span className="table-person-name">{row.original.name}</span>,
-          sortFn: "text",
-        }),
-        siteColumns.accessor((row) => row.address ?? "", {
-          id: "address",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Address" />,
-          cell: ({ row }) => <TableMuted>{row.original.address ?? "No address"}</TableMuted>,
-          sortFn: "text",
-        }),
-      ]),
-    [],
-  );
+// Picks a stable pill colour from the site name so it does not change with list order.
+function siteTone(name: string) {
+  let hash = 0;
+  for (const char of name) hash = (hash + char.charCodeAt(0)) % siteTones.length;
+  return siteTones[hash];
+}
 
+// Turns the latest submission status into a short activity line.
+function activityText(status: ActivityStatus) {
+  if (status === "draft") return "Draft saved";
+  if (status === "pending") return "Waiting for review";
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected";
+  return "Nothing submitted yet";
+}
+
+// Shows the latest status for one kind of worker record.
+function ActivityRow({
+  tone,
+  icon: Icon,
+  label,
+  status,
+  ready,
+}: {
+  tone: "timesheet" | "invoice" | "holiday";
+  icon: typeof FileText;
+  label: string;
+  status: ActivityStatus;
+  ready: boolean;
+}) {
   return (
-    <AppDataTable
-      columns={columns}
-      data={rows}
-      searchPlaceholder="Search job sites..."
-      empty={{
-        title: "No job sites yet",
-        description: "Assigned job sites will appear here.",
-      }}
-    />
+    <div className={`home-activity is-${tone}`}>
+      <span>
+        <Icon aria-hidden="true" />
+      </span>
+      <strong>{label}</strong>
+      <small>{ready ? activityText(status) : "—"}</small>
+    </div>
   );
 }
 

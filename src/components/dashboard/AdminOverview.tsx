@@ -6,7 +6,7 @@ import { homeWindow } from "@/lib/home-window";
 import { useGreeting } from "@/lib/use-greeting";
 import { api } from "../../../convex/_generated/api";
 import { useQuery } from "convex/react";
-import { ArrowRight, BarChart3, CalendarDays, ChevronRight, Clock3, FileText, Users } from "lucide-react";
+import { ArrowRight, BarChart3, CalendarOff, ChevronRight, ClipboardList, FileText, MapPin, Users } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -32,17 +32,17 @@ export function AdminDashboardPage() {
 
       <section className="home-stats" aria-label="Dashboard summary">
         <HomeStat
-          tone="blue"
-          icon={Users}
-          label="Total Job Sites"
+          tone="green"
+          icon={MapPin}
+          label="Total job sites"
           value={home ? String(home.jobSites) : "—"}
           href="/dashboard/admin/job-sites"
-          link="View all job sites"
+          link="View job sites"
         />
         <HomeStat
           tone="green"
-          icon={Clock3}
-          label="Pending Timesheets"
+          icon={ClipboardList}
+          label="Pending timesheets"
           value={home ? String(home.pendingTimesheets) : "—"}
           href="/dashboard/admin/timesheets"
           link="View timesheets"
@@ -50,15 +50,15 @@ export function AdminDashboardPage() {
         <HomeStat
           tone="amber"
           icon={FileText}
-          label="Pending Invoices"
+          label="Pending invoices"
           value={home ? String(home.pendingInvoices) : "—"}
           href="/dashboard/admin/invoices"
           link="View invoices"
         />
         <HomeStat
-          tone="purple"
-          icon={CalendarDays}
-          label="Pending Holidays"
+          tone="green"
+          icon={CalendarOff}
+          label="Pending holidays"
           value={home ? String(home.pendingHolidays) : "—"}
           href="/dashboard/admin/holidays"
           link="View holidays"
@@ -73,12 +73,12 @@ export function AdminDashboardPage() {
                 <Users aria-hidden="true" />
               </span>
               <div>
-                <h2>Your Team</h2>
+                <h2>Your team</h2>
                 <p>Quick overview of your team members and their assigned job sites.</p>
               </div>
             </div>
             <Link className="home-view-all" href="/dashboard/admin/workers">
-              View All <ArrowRight aria-hidden="true" />
+              View all <ArrowRight aria-hidden="true" />
             </Link>
           </header>
           {home === undefined ? (
@@ -94,7 +94,6 @@ export function AdminDashboardPage() {
                     <strong>{member.name}</strong>
                     <span>{member.sites || "No job sites yet"}</span>
                   </span>
-                  <span className="home-status">Active</span>
                   <ChevronRight aria-hidden="true" />
                 </Link>
               ))}
@@ -118,17 +117,28 @@ export function AdminDashboardPage() {
                 <BarChart3 aria-hidden="true" />
               </span>
               <div>
-                <h2>Weekly Stats</h2>
+                <h2>This week</h2>
                 <p>Approved this week</p>
               </div>
             </div>
           </header>
           <div className="home-weekly">
-            <WeekStat icon={FileText} label="Invoices Approved" value={home ? String(home.approvedInvoices) : "—"} />
-            <WeekStat icon={Clock3} label="Timesheets Approved" value={home ? String(home.approvedTimesheets) : "—"} />
             <WeekStat
-              icon={CalendarDays}
-              label="Holiday Requests Approved"
+              href="/dashboard/admin/invoices?status=approved"
+              icon={FileText}
+              label="Invoices approved"
+              value={home ? String(home.approvedInvoices) : "—"}
+            />
+            <WeekStat
+              href="/dashboard/admin/timesheets?status=approved"
+              icon={ClipboardList}
+              label="Timesheets approved"
+              value={home ? String(home.approvedTimesheets) : "—"}
+            />
+            <WeekStat
+              href="/dashboard/admin/holidays?status=approved"
+              icon={CalendarOff}
+              label="Holidays approved"
               value={home ? String(home.approvedHolidays) : "—"}
             />
           </div>
@@ -168,15 +178,25 @@ function HomeStat({
   );
 }
 
-// Shows one approved-this-week total.
-function WeekStat({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: string }) {
+// Links one approved-this-week total to that list with Approved already selected.
+function WeekStat({
+  href,
+  icon: Icon,
+  label,
+  value,
+}: {
+  href: string;
+  icon: typeof Users;
+  label: string;
+  value: string;
+}) {
   return (
-    <div className="home-week">
+    <Link className="home-week" href={href}>
       <span>
         <Icon aria-hidden="true" />
       </span>
       <p>{label}</p>
       <strong>{value}</strong>
-    </div>
+    </Link>
   );
 }

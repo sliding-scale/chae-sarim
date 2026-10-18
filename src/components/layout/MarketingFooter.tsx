@@ -1,9 +1,12 @@
+"use client";
+
 import { Logo } from "@/components/brand/Logo";
 import Link from "next/link";
 
 const links = [
   { href: "/#product", label: "Product" },
-  { href: "/#security", label: "Security" },
+  { href: "/#security", label: "Roles" },
+  { href: "/#pricing", label: "Pricing" },
   { href: "/documentation", label: "Documentation" },
   { href: "/privacy", label: "Privacy" },
   { href: "/terms", label: "Terms" },
@@ -24,7 +27,7 @@ export function MarketingFooter() {
             ))}
           </nav>
         </div>
-        <p className="footer-copy">© 2026 Chae. All rights reserved.</p>
+        <p className="footer-copy">© {new Date().getFullYear()} Chae. All rights reserved.</p>
       </div>
     </footer>
   );

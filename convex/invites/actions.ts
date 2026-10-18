@@ -47,6 +47,26 @@ export const inviteWorker = action({
   },
 });
 
+// Sends the invite email again for a worker who has not joined yet.
+export const resendInvite = action({
+  args: { email: v.string(), origin: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new ConvexError("You need to sign in.");
+
+    const invite = await ctx.runQuery(internal.invites.queries.inviteForRevoke, { email: args.email });
+    if (invite.clerkInvitationId) await revokeClerkInvitation(invite.clerkInvitationId);
+    const invitationId = await createClerkInvitation(normalizeEmail(args.email), signUpLink(args.origin));
+    if (!invitationId) throw new ConvexError("Could not resend that invite.");
+    await ctx.runMutation(internal.invites.mutations.attachInvitationId, {
+      inviteId: invite.inviteId,
+      clerkInvitationId: invitationId,
+    });
+    return null;
+  },
+});
+
 // Cancels a pending worker invite and revokes its Clerk invitation.
 export const revokeInvite = action({
   args: { email: v.string() },

@@ -4,15 +4,17 @@ import {
   AppDataTable,
   DataTableColumnHeader,
   TableFigure,
+  TableFiles,
+  TableIconText,
   TableLongText,
   TableMuted,
-  TableName,
   TableStatus,
 } from "@/components/lists/AppDataTable";
 import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { FileUpload } from "@/components/ui/file-upload";
 import { RequiredMark } from "@/components/ui/RequiredMark";
+import { ContentHeading } from "@/components/dashboard/ContentHeading";
 import { NoSitesNotice } from "@/components/dashboard/NoSitesNotice";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
@@ -20,7 +22,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
-import { FileUp } from "lucide-react";
+import { CalendarDays, FileUp, MapPin } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 
 const maxFiles = 10;
@@ -55,15 +57,15 @@ function formatMonth(value: string) {
   const [year, month] = value.split("-").map(Number);
   if (!year || !month) return value;
   return new Date(year, month - 1, 1).toLocaleDateString("en-GB", {
-    month: "long",
+    month: "short",
     year: "numeric",
   });
 }
 
-// Formats an invoice amount, or a placeholder when the worker left it blank.
+// Formats an invoice amount as a number. The column heading carries the PKR label.
 function formatAmount(amount: number | null) {
   if (amount === null) return "No amount";
-  return amount.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return amount.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // Picks a content type Convex can check for a PDF, PNG, or JPG.
@@ -97,6 +99,15 @@ export function WorkerInvoicesPanel() {
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!jobSiteId || files.length === 0) return;
+    const amountText = amount.trim();
+    if (amountText && !/^\d+(\.\d{1,2})?$/.test(amountText)) {
+      setError("Enter the amount in rupees, using numbers only.");
+      return;
+    }
+    if (amountText && Number(amountText) <= 0) {
+      setError("Enter an amount greater than zero, or leave it blank.");
+      return;
+    }
     const { accepted } = await confirm({
       title: "Submit invoice",
       body: "Submit this invoice for review?",
@@ -107,7 +118,6 @@ export function WorkerInvoicesPanel() {
     setBusy(true);
     setError("");
     try {
-      const amountText = amount.trim();
       const uploaded = [];
       for (const file of files) {
         const type = contentType(file);
@@ -139,6 +149,7 @@ export function WorkerInvoicesPanel() {
 
   return (
     <>
+      <ContentHeading title="Invoices" description="Upload an invoice and follow its review." />
       <section className="worker-card time-off-card">
         <div className="time-off-head">
           <span className="time-off-icon">
@@ -147,7 +158,7 @@ export function WorkerInvoicesPanel() {
           <div className="time-off-copy">
             <h2 className="panel-title">Upload an invoice</h2>
             <p className="panel-copy">
-              Send a PDF, PNG, or JPG for {company}. An admin reviews it after you upload.
+              Send a PDF, PNG, or JPG for {company}. An administrator reviews it after you upload.
             </p>
           </div>
         </div>
@@ -194,7 +205,7 @@ export function WorkerInvoicesPanel() {
               </div>
               <div>
                 <label className="form-label" htmlFor="invoice-amount">
-                  Amount
+                  Amount (PKR)
                 </label>
                 <input
                   id="invoice-amount"
@@ -203,7 +214,10 @@ export function WorkerInvoicesPanel() {
                   value={amount}
                   placeholder="Optional"
                   disabled={busy}
-                  onChange={(event) => setAmount(event.target.value)}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    if (next === "" || /^\d*\.?\d{0,2}$/.test(next)) setAmount(next);
+                  }}
                 />
               </div>
               <div className="is-full">
@@ -252,43 +266,30 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
     () =>
       workerInvoiceColumns.columns([
         workerInvoiceColumns.accessor("jobSiteName", {
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
-          cell: ({ row }) => <TableName>{row.original.jobSiteName}</TableName>,
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Job Site" />,
+          cell: ({ row }) => <TableIconText icon={MapPin}>{row.original.jobSiteName}</TableIconText>,
           sortFn: "text",
         }),
         workerInvoiceColumns.accessor("invoiceMonth", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Month" />,
-          cell: ({ row }) => <TableMuted>{formatMonth(row.original.invoiceMonth)}</TableMuted>,
+          cell: ({ row }) => <TableIconText icon={CalendarDays}>{formatMonth(row.original.invoiceMonth)}</TableIconText>,
           sortFn: "alphanumeric",
         }),
-        workerInvoiceColumns.accessor((row) => row.amount ?? 0, {
-          id: "amount",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" />,
+        workerInvoiceColumns.accessor("amount", {
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Amount (PKR)" align="end" />,
           cell: ({ row }) =>
             row.original.amount === null ? (
               <TableMuted>No amount</TableMuted>
             ) : (
-              <TableFigure value={formatAmount(row.original.amount)} negative={row.original.amount < 0} />
+              <TableFigure value={formatAmount(row.original.amount)} />
             ),
           sortFn: "alphanumeric",
         }),
         workerInvoiceColumns.accessor((row) => row.files.map((file) => file.fileName).join(" "), {
           id: "files",
-          header: "Files",
+          header: () => <span className="table-sort">Files</span>,
           enableSorting: false,
-          cell: ({ row }) => (
-            <div className="file-links">
-              {row.original.files.map((file) =>
-                file.url ? (
-                  <a key={file.url} href={file.url} target="_blank" rel="noreferrer">
-                    {file.fileName}
-                  </a>
-                ) : (
-                  <span key={file.fileName}>{file.fileName}</span>
-                ),
-              )}
-            </div>
-          ),
+          cell: ({ row }) => <TableFiles files={row.original.files} />,
         }),
         workerInvoiceColumns.accessor("status", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
@@ -300,7 +301,9 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
                   ? "success"
                   : row.original.status === "rejected"
                     ? "danger"
-                    : "warning"
+                    : row.original.status === "draft"
+                      ? "draft"
+                      : "warning"
               }
             />
           ),
@@ -309,7 +312,7 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
         workerInvoiceColumns.accessor((row) => row.rejectionReason ?? "", {
           id: "rejectionReason",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Rejection reason" />,
-          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" />,
+          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" tone="danger" />,
           sortFn: "text",
         }),
       ]),
@@ -320,7 +323,7 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
     <AppDataTable
       columns={columns}
       data={rows}
-      searchPlaceholder="Search invoices..."
+      searchPlaceholder="Search by job site or month…"
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
       empty={{
         title: "No invoices yet",

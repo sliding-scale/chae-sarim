@@ -1,11 +1,13 @@
 "use client";
 
+import { ContentHeading } from "@/components/dashboard/ContentHeading";
 import { ReviewBoard } from "@/components/dashboard/ReviewBoard";
 import {
   AppDataTable,
   DataTableColumnHeader,
   TableFigure,
   TableIconText,
+  TableJobSite,
   TableLongText,
   TablePerson,
   TableStatus,
@@ -18,7 +20,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
-import { CalendarDays, MapPin } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const dayLabels = [
@@ -59,7 +61,7 @@ function formatHours(value: number) {
 }
 
 // Lets an admin review submitted timesheets and approve or reject the ones still pending.
-export function TimesheetsPanel() {
+export function TimesheetsPanel({ status }: { status?: "approved" }) {
   const timesheets = useQuery(api.timesheets.queries.listTimesheets);
   const decideTimesheet = useMutation(api.timesheets.mutations.decideTimesheet);
   const [error, setError] = useState("");
@@ -94,13 +96,16 @@ export function TimesheetsPanel() {
   }
 
   return (
-    <ReviewBoard title="Submitted Timesheets" noun="timesheets" rows={rows} error={error}>
+    <>
+      <ContentHeading title="Timesheets" description="Review the weekly hours workers submit." />
+      <ReviewBoard title="Submitted timesheets" rows={rows} error={error}>
       {rows === undefined ? (
         <p className="invite-note">Loading timesheets…</p>
       ) : (
         <TimesheetTable rows={rows} busyId={busyId} onDecide={onDecide} />
       )}
     </ReviewBoard>
+    </>
   );
 }
 
@@ -126,9 +131,9 @@ function TimesheetTable({
           sortFn: "text",
         }),
         timesheetColumns.accessor("jobSiteName", {
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Job Site" />,
           cell: ({ row }) => (
-            <TableIconText icon={MapPin}>{row.original.jobSiteName}</TableIconText>
+            <TableJobSite name={row.original.jobSiteName} />
           ),
           sortFn: "text",
         }),
@@ -141,7 +146,14 @@ function TimesheetTable({
         }),
         timesheetColumns.accessor("totalHours", {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Hours" />,
-          cell: ({ row }) => <TableFigure value={`${formatHours(row.original.totalHours)}h`} />,
+          cell: ({ row }) => (
+            <span className="day-hours">
+              <TableFigure value={`${formatHours(row.original.totalHours)} h`} />
+              <span className="table-muted">
+                {dayLabels.map(([key, label]) => `${label} ${formatHours(row.original.hours[key])}`).join(" · ")}
+              </span>
+            </span>
+          ),
           sortFn: "alphanumeric",
         }),
         timesheetColumns.accessor((row) => row.comments ?? "", {
@@ -163,14 +175,14 @@ function TimesheetTable({
         timesheetColumns.accessor((row) => row.rejectionReason ?? "", {
           id: "rejectionReason",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Rejection reason" />,
-          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" />,
+          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" tone="danger" />,
           sortFn: "text",
         }),
         ...(onDecide
           ? [
               timesheetColumns.display({
                 id: "actions",
-                header: "Actions",
+                header: () => <span className="table-sort">Actions</span>,
                 enableSorting: false,
                 enableGlobalFilter: false,
                 cell: ({ row }) => {
@@ -201,10 +213,15 @@ function TimesheetTable({
 
   return (
     <AppDataTable
+      key={status ?? "all"}
       columns={columns}
       data={rows}
-      searchPlaceholder="Search by worker or site..."
-      filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
+      searchPlaceholder="Search by worker or job site…"
+      initialFacets={status === "approved" ? { status: ["Approved"] } : undefined}
+      filters={[
+        { id: "week", label: "Week", value: (row) => formatDateRange(row.weekStart, row.weekEnd) },
+        { id: "status", label: "Status", value: (row) => statusLabel(row.status) },
+      ]}
       empty={{
         title: "No timesheets yet",
         description: "When workers submit weekly hours, they will appear here for your review.",
@@ -221,6 +238,6 @@ function statusLabel(status: TimesheetStatus) {
 }
 
 // Shows the timesheet review page for the signed-in admin's company.
-export function AdminTimesheetsPage() {
-  return <TimesheetsPanel />;
+export function AdminTimesheetsPage({ status }: { status?: "approved" }) {
+  return <TimesheetsPanel status={status} />;
 }

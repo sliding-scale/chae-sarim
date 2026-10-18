@@ -1,7 +1,8 @@
 "use client";
 
 import { JobSiteArt } from "@/components/dashboard/AdminArt";
-import { AppDataTable, DataTableColumnHeader, TableIconText, TableMuted, TableStatus } from "@/components/lists/AppDataTable";
+import { ContentHeading } from "@/components/dashboard/ContentHeading";
+import { AppDataTable, DataTableColumnHeader, TableIconText, TableMuted, TableName } from "@/components/lists/AppDataTable";
 import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -13,7 +14,9 @@ import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { MapPin, MapPinPlus } from "lucide-react";
-import { FormEvent, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 // Reads a user-facing message from a Convex error.
 function errorText(error: unknown, fallback: string) {
@@ -22,7 +25,7 @@ function errorText(error: unknown, fallback: string) {
 }
 
 // Lets an admin add, edit, and remove job sites for their company.
-export function JobSitesPanel() {
+export function JobSitesPanel({ query = "" }: { query?: string }) {
   const workspace = useWorkspace();
   const company = workspace.tenantName ?? "this company";
   const sites = useQuery(api.jobSites.queries.listJobSites);
@@ -99,6 +102,7 @@ export function JobSitesPanel() {
 
   return (
     <>
+      <ContentHeading title="Job sites" description="Add the places where workers record time." />
       <section className="admin-hero is-site">
         <div className="admin-hero-head">
           <span className="admin-hero-icon">
@@ -106,7 +110,7 @@ export function JobSitesPanel() {
           </span>
           <div>
             <h2 className="panel-title">Add a job site</h2>
-            <p className="panel-copy">Where workers at {company} record time.</p>
+            <p className="panel-copy">Add a place where workers at {company} record time.</p>
           </div>
         </div>
         <form className="site-form" onSubmit={onCreate} noValidate>
@@ -163,6 +167,7 @@ export function JobSitesPanel() {
           <p className="invite-note">Loading job sites…</p>
         ) : (
           <SiteTable
+            query={query}
             rows={sites}
             editingId={editingId}
             editName={editName}
@@ -190,23 +195,139 @@ type SiteRow = {
 
 const siteColumns = createColumnHelper<DataTableFeatures, SiteRow>();
 
-// Shows a job site as coloured initials beside its name.
-function SiteName({ name }: { name: string }) {
-  const initials = name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
+// Opens the workers list already searched for this person.
+function workerSearchHref(name: string) {
+  return `/dashboard/admin/workers?q=${encodeURIComponent(name)}`;
+}
+
+// Shows one assigned worker's initials, their name on hover, and a link into the workers search.
+function WorkerFace({ name }: { name: string }) {
+  const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
+
+  function showTip(element: HTMLElement) {
+    const box = element.getBoundingClientRect();
+    setTip({ x: box.left + box.width / 2, y: box.top });
+  }
+
   return (
-    <span className="table-person">
-      <span className="site-initials">{initials || "?"}</span>
-      <span className="table-person-name">{name}</span>
-    </span>
+    <>
+      <Link
+        href={workerSearchHref(name)}
+        className="admin-face"
+        aria-label={`Search workers for ${name}`}
+        onMouseEnter={(event) => showTip(event.currentTarget)}
+        onMouseLeave={() => setTip(null)}
+        onFocus={(event) => showTip(event.currentTarget)}
+        onBlur={() => setTip(null)}
+      >
+        <UserAvatar name={name} />
+      </Link>
+      {tip
+        ? createPortal(
+            <span className="admin-face-tip" role="tooltip" style={{ left: tip.x, top: tip.y }}>
+              {name}
+            </span>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+// Lists every worker assigned to one job site.
+function SiteWorkersDialog({
+  siteName,
+  workers,
+  onClose,
+}: {
+  siteName: string;
+  workers: { name: string }[];
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="confirm-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="saas-card confirm-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <h2 id={titleId} className="panel-title">
+          {siteName}
+        </h2>
+        <p className="panel-copy">
+          {workers.length} {workers.length === 1 ? "worker" : "workers"} assigned to this job site.
+        </p>
+        <div className="site-worker-list">
+          {workers.map((worker, index) => (
+            <Link key={`${worker.name}-${index}`} href={workerSearchHref(worker.name)} className="table-person site-worker-link">
+              <UserAvatar name={worker.name} />
+              <span className="table-person-name">{worker.name}</span>
+            </Link>
+          ))}
+        </div>
+        <div className="confirm-actions">
+          <button ref={closeRef} type="button" className="btn-secondary" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
+// Shows the first few assigned workers, and opens the full list when some are hidden.
+function SiteWorkers({ siteName, workers }: { siteName: string; workers: { name: string }[] }) {
+  const [open, setOpen] = useState(false);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => {
+    setOpen(false);
+    moreRef.current?.focus();
+  }, []);
+
+  if (workers.length === 0) return <TableMuted>None assigned</TableMuted>;
+  const shown = workers.slice(0, 4);
+  const extra = workers.length - shown.length;
+  return (
+    <>
+      <span className="admin-faces">
+        {shown.map((worker, index) => (
+          <WorkerFace key={`${worker.name}-${index}`} name={worker.name} />
+        ))}
+        {extra > 0 ? (
+          <button
+            ref={moreRef}
+            type="button"
+            className="admin-faces-more"
+            aria-haspopup="dialog"
+            aria-label={`View all ${workers.length} workers assigned to ${siteName}`}
+            onClick={() => setOpen(true)}
+          >
+            +{extra}
+          </button>
+        ) : null}
+      </span>
+      {open ? <SiteWorkersDialog siteName={siteName} workers={workers} onClose={close} /> : null}
+    </>
   );
 }
 
 // Renders job sites with inline editing and remove actions.
 function SiteTable({
+  query,
   rows,
   editingId,
   editName,
@@ -219,6 +340,7 @@ function SiteTable({
   onSave,
   onRemove,
 }: {
+  query: string;
   rows: SiteRow[];
   editingId: Id<"jobSites"> | null;
   editName: string;
@@ -256,6 +378,20 @@ function SiteTable({
     onRemove,
   };
 
+  // Leaves edit mode when the pointer goes down outside the name and address fields.
+  useEffect(() => {
+    if (!editingId) return;
+    function onPointerDown(event: PointerEvent) {
+      const state = stateRef.current;
+      if (!state.editingId || state.busyKey === state.editingId) return;
+      const target = event.target;
+      if (!(target instanceof Element) || target.closest("[data-site-edit]")) return;
+      state.onCancel();
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [editingId]);
+
   const columns = useMemo(
     () =>
       siteColumns.columns([
@@ -266,11 +402,12 @@ function SiteTable({
             const state = stateRef.current;
             const editing = state.editingId === row.original.jobSiteId;
             const busy = state.busyKey === row.original.jobSiteId;
-            if (!editing) return <SiteName name={row.original.name} />;
+            if (!editing) return <TableName>{row.original.name}</TableName>;
             return (
               <input
                 id={`site-name-${row.original.jobSiteId}`}
                 className="input-saas table-edit-input"
+                data-site-edit=""
                 aria-label="Name"
                 value={state.editName}
                 disabled={busy}
@@ -297,6 +434,7 @@ function SiteTable({
             return (
               <input
                 className="input-saas table-edit-input"
+                data-site-edit=""
                 aria-label={`Address for ${row.original.name}`}
                 value={state.editAddress}
                 placeholder="Optional"
@@ -308,32 +446,13 @@ function SiteTable({
         }),
         siteColumns.accessor((row) => row.workers.map((worker) => worker.name).join(", "), {
           id: "workers",
-          header: "Assigned workers",
+          header: () => <span className="table-sort">Assigned Workers</span>,
           enableSorting: false,
-          cell: ({ row }) => {
-            const people = row.original.workers;
-            if (people.length === 0) return <TableMuted>None assigned</TableMuted>;
-            const shown = people.slice(0, 4);
-            const extra = people.length - shown.length;
-            return (
-              <span className="admin-faces">
-                {shown.map((worker, index) => (
-                  <UserAvatar key={`${worker.name}-${index}`} name={worker.name} />
-                ))}
-                {extra > 0 ? <span className="admin-faces-more">+{extra}</span> : null}
-              </span>
-            );
-          },
-        }),
-        siteColumns.display({
-          id: "status",
-          header: "Status",
-          enableSorting: false,
-          cell: () => <TableStatus label="Active" tone="success" />,
+          cell: ({ row }) => <SiteWorkers siteName={row.original.name} workers={row.original.workers} />,
         }),
         siteColumns.display({
           id: "actions",
-          header: "Actions",
+          header: () => <span className="table-sort">Actions</span>,
           enableSorting: false,
           enableGlobalFilter: false,
           cell: ({ row }) => {
@@ -342,7 +461,7 @@ function SiteTable({
             const busy = state.busyKey === row.original.jobSiteId;
             if (editing) {
               return (
-                <div className="row-actions">
+                <div className="row-actions" data-site-edit="">
                   <button type="button" className="row-action" disabled={busy} onClick={() => state.onSave(row.original.jobSiteId)}>
                     {busy ? "Saving…" : "Save"}
                   </button>
@@ -380,9 +499,11 @@ function SiteTable({
 
   return (
     <AppDataTable
+      key={query}
       columns={columns}
       data={rows}
-      searchPlaceholder="Filter by name or address..."
+      searchPlaceholder="Search by name or address…"
+      initialSearch={query}
       empty={{
         title: "No job sites yet",
         description: "Job sites you add will appear here.",
@@ -392,6 +513,6 @@ function SiteTable({
 }
 
 // Shows the job site page for the signed-in admin's company.
-export function JobSitesPage() {
-  return <JobSitesPanel />;
+export function JobSitesPage({ query = "" }: { query?: string }) {
+  return <JobSitesPanel query={query} />;
 }

@@ -106,7 +106,7 @@ export function CompanySettings() {
                 id="company-photo"
                 className="visually-hidden"
                 type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
+                accept="image/png,image/jpeg,image/webp"
                 onChange={(event) => {
                   const next = event.target.files?.[0] ?? null;
                   if (next && next.size > 5 * 1024 * 1024) {

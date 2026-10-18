@@ -50,7 +50,7 @@ export function DashboardShell({
         />
         <div className="dashboard-main">
           <DashboardTopbar
-            title={mustChangePassword ? "Choose a password" : ""}
+            title={mustChangePassword ? "Choose a new password" : ""}
             menuOpen={open}
             onMenu={() => setOpen((value) => !value)}
           />

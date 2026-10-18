@@ -27,7 +27,7 @@ export const listJobSites = query({
       const assignments = await ctx.db
         .query("jobSiteAssignments")
         .withIndex("by_job_site_id", (q) => q.eq("jobSiteId", site._id))
-        .take(12);
+        .take(jobSiteLimit);
       const workers = [];
       for (const assignment of assignments) {
         if (assignment.tenantId !== membership.tenantId) continue;

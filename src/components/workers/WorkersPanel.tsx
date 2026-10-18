@@ -1,6 +1,7 @@
 "use client";
 
 import { InviteArt } from "@/components/dashboard/AdminArt";
+import { ContentHeading } from "@/components/dashboard/ContentHeading";
 import { AppDataTable, DataTableColumnHeader, TableMuted, TablePerson, TableStatus, emailHandle } from "@/components/lists/AppDataTable";
 import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useWorkspace } from "@/components/layout/RoleGate";
@@ -11,8 +12,11 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useAction, useMutation, useQuery } from "convex/react";
+import { jobSiteSearchHref } from "@/lib/admin-search";
 import { Info, Mail, Send, UserRoundPlus } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
+import { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -24,7 +28,7 @@ function errorText(error: unknown, fallback: string) {
 }
 
 // Lets an admin invite, cancel invites, and remove workers in their company.
-export function WorkersPanel() {
+export function WorkersPanel({ query = "" }: { query?: string }) {
   const workspace = useWorkspace();
   const company = workspace.tenantName ?? "this company";
   const workers = useQuery(api.memberships.queries.listWorkers);
@@ -33,6 +37,7 @@ export function WorkersPanel() {
   const removeWorker = useMutation(api.memberships.mutations.removeWorker);
   const setWorkerJobSites = useMutation(api.memberships.mutations.setWorkerJobSites);
   const inviteWorker = useAction(api.invites.actions.inviteWorker);
+  const resendInvite = useAction(api.invites.actions.resendInvite);
   const revokeInvite = useAction(api.invites.actions.revokeInvite);
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
@@ -63,6 +68,28 @@ export function WorkersPanel() {
       setNotice("Invite sent. They'll get an email with a link to join.");
     } catch (caught) {
       setError(errorText(caught, "Could not invite that worker."));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  // Emails the invite link again for a worker who has not joined.
+  async function onResend(target: string) {
+    const { accepted } = await confirm({
+      title: "Resend invite",
+      body: `Send the invite for ${target} again?`,
+      confirmLabel: "Resend invite",
+      tone: "primary",
+    });
+    if (!accepted) return;
+    setBusyKey(`resend:${target}`);
+    setError("");
+    setNotice("");
+    try {
+      await resendInvite({ email: target, origin: window.location.origin });
+      setNotice(`Invite sent again to ${target}.`);
+    } catch (caught) {
+      setError(errorText(caught, "Could not resend that invite."));
     } finally {
       setBusyKey(null);
     }
@@ -128,6 +155,10 @@ export function WorkersPanel() {
 
   return (
     <>
+      <ContentHeading
+        title="Workers"
+        description="Invite people to the company and assign the job sites they work on."
+      />
       <section className="admin-hero is-invite">
         <div className="admin-hero-head">
           <span className="admin-hero-icon">
@@ -197,6 +228,7 @@ export function WorkersPanel() {
               ...workers.map((worker) => ({ kind: "worker" as const, ...worker })),
               ...invites.map((invite) => ({ kind: "invite" as const, email: invite.email })),
             ]}
+            query={query}
             busyKey={busyKey}
             onAssign={(worker) =>
               setAssigning({
@@ -207,6 +239,7 @@ export function WorkersPanel() {
             }
             onRemove={onRemove}
             onRevoke={onRevoke}
+            onResend={onResend}
           />
         )}
       </section>
@@ -223,7 +256,7 @@ export function WorkersPanel() {
             onSubmit={onSaveSites}
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <h2 className="panel-title">Job sites for {assigning.name}</h2>
+            <h2 className="panel-title">Assign job sites</h2>
             <p className="panel-copy">Choose the sites this worker can use for timesheets, invoices, and holidays.</p>
             {sites === undefined ? (
               <p className="invite-note">Loading job sites…</p>
@@ -266,7 +299,7 @@ export function WorkersPanel() {
                 Cancel
               </button>
               <button className="btn-primary" type="submit" disabled={busyKey === assigning.membershipId || !sites?.length}>
-                {busyKey === assigning.membershipId ? "Saving…" : "Save sites"}
+                {busyKey === assigning.membershipId ? "Saving…" : "Save changes"}
               </button>
             </div>
           </form>
@@ -287,22 +320,115 @@ type RosterRow =
   | ({ kind: "worker" } & WorkerRow)
   | { kind: "invite"; email: string };
 
-const pillTones = ["blue", "green", "purple"] as const;
+const pillTones = ["green", "blue", "amber", "purple"] as const;
 
-// Shows a worker's assigned sites as short coloured labels.
-function SitePills({ names }: { names: string[] }) {
-  if (names.length === 0) return <span className="table-muted">None assigned</span>;
-  const shown = names.slice(0, 2);
-  const extra = names.length - shown.length;
+// Opens the job sites list already searched for this site.
+function JobSitePill({ name }: { name: string }) {
   return (
-    <span className="admin-pills">
-      {shown.map((name, index) => (
-        <span key={name} className={`admin-pill is-${pillTones[index % pillTones.length]}`}>
-          {name}
-        </span>
-      ))}
-      {extra > 0 ? <span className="admin-pill is-more">+{extra}</span> : null}
-    </span>
+    <Link href={jobSiteSearchHref(name)} className={`admin-pill is-${siteTone(name)}`} aria-label={`Search job sites for ${name}`}>
+      {name}
+    </Link>
+  );
+}
+
+// Picks a stable pill colour from the site name so it does not change with list order.
+function siteTone(name: string) {
+  let hash = 0;
+  for (const char of name) hash = (hash + char.charCodeAt(0)) % pillTones.length;
+  return pillTones[hash];
+}
+
+// Lists every job site assigned to one worker.
+function WorkerSitesDialog({
+  workerName,
+  sites,
+  onClose,
+}: {
+  workerName: string;
+  sites: { jobSiteId: Id<"jobSites">; name: string }[];
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="confirm-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="saas-card confirm-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <h2 id={titleId} className="panel-title">
+          {workerName}
+        </h2>
+        <p className="panel-copy">
+          {sites.length} job {sites.length === 1 ? "site" : "sites"} assigned to this worker.
+        </p>
+        <div className="admin-pills site-pill-list">
+          {sites.map((site) => (
+            <JobSitePill key={site.jobSiteId} name={site.name} />
+          ))}
+        </div>
+        <div className="confirm-actions">
+          <button ref={closeRef} type="button" className="btn-secondary" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
+// Shows a worker's assigned sites, and opens the full list when some are hidden.
+function SitePills({
+  workerName,
+  sites,
+}: {
+  workerName: string;
+  sites: { jobSiteId: Id<"jobSites">; name: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => {
+    setOpen(false);
+    moreRef.current?.focus();
+  }, []);
+
+  if (sites.length === 0) return <span className="table-muted">None assigned</span>;
+  const shown = sites.slice(0, 2);
+  const extra = sites.length - shown.length;
+  return (
+    <>
+      <span className="admin-pills">
+        {shown.map((site) => (
+          <JobSitePill key={site.jobSiteId} name={site.name} />
+        ))}
+        {extra > 0 ? (
+          <button
+            ref={moreRef}
+            type="button"
+            className="admin-pill is-more"
+            aria-haspopup="dialog"
+            aria-label={`View all ${sites.length} job sites for ${workerName}`}
+            onClick={() => setOpen(true)}
+          >
+            +{extra}
+          </button>
+        ) : null}
+      </span>
+      {open ? <WorkerSitesDialog workerName={workerName} sites={sites} onClose={close} /> : null}
+    </>
   );
 }
 
@@ -311,16 +437,20 @@ const rosterColumns = createColumnHelper<DataTableFeatures, RosterRow>();
 // Renders joined workers and pending invites in the one table from the workers design.
 function WorkerTable({
   rows,
+  query,
   busyKey,
   onAssign,
   onRemove,
   onRevoke,
+  onResend,
 }: {
   rows: RosterRow[];
+  query: string;
   busyKey: string | null;
   onAssign: (worker: WorkerRow) => void;
   onRemove: (membershipId: Id<"memberships">, name: string) => void;
   onRevoke: (email: string) => void;
+  onResend: (email: string) => void;
 }) {
   const columns = useMemo(
     () =>
@@ -330,8 +460,10 @@ function WorkerTable({
           header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
           cell: ({ row }) => {
             const email = row.original.email;
-            const name = row.original.kind === "worker" ? row.original.name : email.split("@")[0] || email;
-            return <TablePerson name={name} detail={email ? emailHandle(email) : null} active={row.original.kind === "worker"} />;
+            if (row.original.kind === "invite") {
+              return <TablePerson name={email.split("@")[0] || email} />;
+            }
+            return <TablePerson name={row.original.name} detail={email ? emailHandle(email) : null} />;
           },
           sortFn: "text",
         }),
@@ -345,35 +477,39 @@ function WorkerTable({
           header: ({ column }) => <DataTableColumnHeader column={column} title="Job sites" />,
           cell: ({ row }) =>
             row.original.kind === "worker" ? (
-              <SitePills names={row.original.jobSites.map((site) => site.name)} />
+              <SitePills workerName={row.original.name} sites={row.original.jobSites} />
             ) : (
               <span className="table-muted">None assigned</span>
             ),
           sortFn: "text",
         }),
-        rosterColumns.accessor((row) => (row.kind === "worker" ? "Active" : "Pending Invite"), {
+        rosterColumns.accessor((row) => (row.kind === "worker" ? "Joined" : "Pending invite"), {
           id: "status",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
           cell: ({ row }) => (
             <TableStatus
-              label={row.original.kind === "worker" ? "Active" : "Pending Invite"}
+              label={row.original.kind === "worker" ? "Joined" : "Pending invite"}
               tone={row.original.kind === "worker" ? "success" : "warning"}
+              marker="dot"
             />
           ),
           sortFn: "text",
         }),
         rosterColumns.display({
           id: "actions",
-          header: "Actions",
+          header: () => <span className="table-sort">Actions</span>,
           enableSorting: false,
           enableGlobalFilter: false,
           cell: ({ row }) => {
             if (row.original.kind === "invite") {
-              const busy = busyKey === `invite:${row.original.email}`;
+              const busy = busyKey === `invite:${row.original.email}` || busyKey === `resend:${row.original.email}`;
               return (
                 <div className="row-actions">
+                  <button type="button" className="row-action" disabled={busy} onClick={() => onResend(row.original.email)}>
+                    {busyKey === `resend:${row.original.email}` ? "Sending…" : "Resend invite"}
+                  </button>
                   <button type="button" className="row-action row-action-danger" disabled={busy} onClick={() => onRevoke(row.original.email)}>
-                    {busy ? "Removing…" : "Remove"}
+                    {busyKey === `invite:${row.original.email}` ? "Cancelling…" : "Cancel invite"}
                   </button>
                 </div>
               );
@@ -398,16 +534,17 @@ function WorkerTable({
           },
         }),
       ]),
-    [busyKey, onAssign, onRemove, onRevoke],
+    [busyKey, onAssign, onRemove, onResend, onRevoke],
   );
 
   return (
     <AppDataTable
       columns={columns}
       data={rows}
-      searchPlaceholder="Search by name or email..."
+      searchPlaceholder="Search by name or email…"
+      initialSearch={query}
       filters={[
-        { id: "status", label: "Status", value: (row) => (row.kind === "worker" ? "Active" : "Pending Invite") },
+        { id: "status", label: "Status", value: (row) => (row.kind === "worker" ? "Joined" : "Pending invite") },
         {
           id: "site",
           label: "Job site",
@@ -421,6 +558,6 @@ function WorkerTable({
 }
 
 // Shows the workers page for the signed-in admin's company.
-export function WorkersPage() {
-  return <WorkersPanel />;
+export function WorkersPage({ query = "" }: { query?: string }) {
+  return <WorkersPanel query={query} />;
 }

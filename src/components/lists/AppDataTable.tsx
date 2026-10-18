@@ -1,5 +1,6 @@
 "use client";
 
+import { jobSiteSearchHref } from "@/lib/admin-search";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -9,7 +10,8 @@ import {
   type RowData,
   type SortingState,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock3, Columns3, FileText, Funnel, Search, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock3, Columns3, FileText, Funnel, MapPin, Search, XCircle, type LucideIcon } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { features, type DataTableFeatures } from "./data-table-features";
@@ -25,7 +27,7 @@ export function DataTableColumnHeader({
   align?: "start" | "end";
 }) {
   const sorted = column.getIsSorted();
-  const Icon = sorted === "asc" ? ArrowUp : ArrowDown;
+  const Icon = sorted === "asc" ? ArrowUp : sorted === "desc" ? ArrowDown : ArrowUpDown;
   return (
     <button
       type="button"
@@ -33,7 +35,7 @@ export function DataTableColumnHeader({
       onClick={() => column.toggleSorting(sorted === "asc")}
     >
       {title}
-      {sorted ? <Icon className="table-sort-icon" aria-hidden="true" /> : null}
+      <Icon className={sorted ? "table-sort-icon" : "table-sort-icon is-idle"} aria-hidden="true" />
     </button>
   );
 }
@@ -82,19 +84,32 @@ export function TableIconText({ icon: Icon, children }: { icon: LucideIcon; chil
   );
 }
 
+// Links a job site name to the job sites list, already searched for that name.
+export function TableJobSite({ name }: { name: string }) {
+  return (
+    <TableIconText icon={MapPin}>
+      <Link href={jobSiteSearchHref(name)} aria-label={`Search job sites for ${name}`}>
+        {name}
+      </Link>
+    </TableIconText>
+  );
+}
+
 // Renders a status pill, with the icon used on the admin review tables.
 export function TableStatus({
   label,
   tone = "default",
+  marker = "icon",
 }: {
   label: string;
-  tone?: "default" | "success" | "warning" | "danger";
+  tone?: "default" | "success" | "warning" | "danger" | "draft";
+  marker?: "icon" | "dot";
 }) {
   const Icon = tone === "success" ? CheckCircle2 : tone === "danger" ? XCircle : tone === "warning" ? Clock3 : null;
   return (
     <div className="table-status-cell">
       <span className={tone === "default" ? "table-status" : `table-status is-${tone}`}>
-        {Icon ? <Icon size={14} aria-hidden="true" /> : null}
+        {marker === "dot" ? <i className="status-dot" aria-hidden="true" /> : Icon ? <Icon size={14} aria-hidden="true" /> : null}
         {label}
       </span>
     </div>
@@ -127,8 +142,38 @@ export function formatDateRange(start: string, end: string) {
   return `${startDay}–${full(to)}`;
 }
 
+// Renders invoice files as pills, with a link when the file can be opened.
+export function TableFiles({ files }: { files: { fileName: string; url: string | null }[] }) {
+  if (files.length === 0) return <TableMuted>No file</TableMuted>;
+  return (
+    <span className="file-links">
+      {files.map((file, index) =>
+        file.url ? (
+          <a key={`${file.fileName}-${index}`} className="file-pill" href={file.url} target="_blank" rel="noreferrer">
+            <FileText size={14} aria-hidden="true" />
+            {file.fileName}
+          </a>
+        ) : (
+          <span key={`${file.fileName}-${index}`} className="file-pill">
+            <FileText size={14} aria-hidden="true" />
+            {file.fileName}
+          </span>
+        ),
+      )}
+    </span>
+  );
+}
+
 // Shows long text cut to two lines, with a Read more link that opens the whole text when it does not fit.
-export function TableLongText({ text, title }: { text: string | null | undefined; title: string }) {
+export function TableLongText({
+  text,
+  title,
+  tone,
+}: {
+  text: string | null | undefined;
+  title: string;
+  tone?: "danger";
+}) {
   const value = text?.trim() ?? "";
   const copyRef = useRef<HTMLSpanElement>(null);
   const [clipped, setClipped] = useState(false);
@@ -146,7 +191,7 @@ export function TableLongText({ text, title }: { text: string | null | undefined
 
   if (!value) return <TableEmptyValue />;
   return (
-    <div className="table-long-text">
+    <div className={tone === "danger" ? "table-long-text is-danger" : "table-long-text"}>
       <span ref={copyRef} className="table-long-text-copy">
         {value}
       </span>
@@ -217,14 +262,14 @@ const columnLabels: Record<string, string> = {
   status: "Status",
   role: "Role",
   address: "Address",
-  workers: "Assigned workers",
+  workers: "Assigned Workers",
   worker: "Worker",
-  jobSiteName: "Job site",
+  jobSiteName: "Job Site",
   weekStart: "Week",
   totalHours: "Hours",
   comments: "Comments",
   invoiceMonth: "Month",
-  amount: "Amount",
+  amount: "Amount (PKR)",
   files: "Files",
   startDate: "Dates",
   reason: "Reason",
@@ -278,6 +323,26 @@ function facetOptions<TData>(data: TData[], filter: TableFacet<TData>) {
   ].sort((a, b) => a.localeCompare(b));
 }
 
+// Shows about eight choices, then scrolls the rest so a long job site list stays in the menu.
+function FacetChoices({
+  options,
+  selected,
+  onToggle,
+}: {
+  options: string[];
+  selected: string[];
+  onToggle: (option: string) => void;
+}) {
+  const choices = options.map((option) => (
+    <label key={option} className="table-menu-option">
+      <input type="checkbox" checked={selected.includes(option)} onChange={() => onToggle(option)} />
+      <span>{option}</span>
+    </label>
+  ));
+  if (options.length <= 8) return choices;
+  return <div className="table-menu-scroll">{choices}</div>;
+}
+
 // Shows the shared empty-table illustration: a sheet, a title, and a short note.
 function TableEmpty({ title, description }: { title: string; description: string }) {
   return (
@@ -297,20 +362,24 @@ export function AppDataTable<TData extends RowData>({
   columns,
   data,
   searchPlaceholder,
+  initialSearch = "",
+  initialFacets = {},
   filters = [],
   empty,
 }: {
   columns: ColumnDef<DataTableFeatures, TData>[];
   data: TData[];
   searchPlaceholder: string;
+  initialSearch?: string;
+  initialFacets?: Record<string, string[]>;
   filters?: TableFacet<TData>[];
   empty?: { title: string; description: string };
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [globalFilter, setGlobalFilter] = useState(initialSearch);
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
-  const [facets, setFacets] = useState<Record<string, string[]>>({});
+  const [facets, setFacets] = useState<Record<string, string[]>>(initialFacets);
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
 
@@ -383,16 +452,11 @@ export function AppDataTable<TData extends RowData>({
                   {options.length === 0 ? (
                     <p className="table-menu-empty">Nothing to filter</p>
                   ) : (
-                    options.map((option) => (
-                      <label key={option} className="table-menu-option">
-                        <input
-                          type="checkbox"
-                          checked={selected.includes(option)}
-                          onChange={() => toggleFacet(filter.id, option)}
-                        />
-                        <span>{option}</span>
-                      </label>
-                    ))
+                    <FacetChoices
+                      options={options}
+                      selected={selected}
+                      onToggle={(option) => toggleFacet(filter.id, option)}
+                    />
                   )}
                 </div>
               );
@@ -413,16 +477,11 @@ export function AppDataTable<TData extends RowData>({
                 {options.length === 0 ? (
                   <p className="table-menu-empty">Nothing to filter</p>
                 ) : (
-                  options.map((option) => (
-                    <label key={option} className="table-menu-option">
-                      <input
-                        type="checkbox"
-                        checked={selected.includes(option)}
-                        onChange={() => toggleFacet(filter.id, option)}
-                      />
-                      <span>{option}</span>
-                    </label>
-                  ))
+                  <FacetChoices
+                    options={options}
+                    selected={selected}
+                    onToggle={(option) => toggleFacet(filter.id, option)}
+                  />
                 )}
                 {selected.length > 0 ? (
                   <button type="button" className="table-menu-clear" onClick={() => setFacets((current) => ({ ...current, [filter.id]: [] }))}>
@@ -448,7 +507,7 @@ export function AppDataTable<TData extends RowData>({
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="border-[var(--color-border)] hover:bg-transparent">
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
+                  <TableHead key={header.id} className={header.column.id === "amount" ? "is-numeric" : undefined}>
                     {header.isPlaceholder ? null : <FlexRender header={header} />}
                   </TableHead>
                 ))}
@@ -460,7 +519,7 @@ export function AppDataTable<TData extends RowData>({
               table.getRowModel().rows.map((row) => (
                 <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell key={cell.id} className={cell.column.id === "amount" ? "is-numeric" : undefined}>
                       <FlexRender cell={cell} />
                     </TableCell>
                   ))}
@@ -487,7 +546,6 @@ export function AppDataTable<TData extends RowData>({
         <label className="table-page-size">
           Rows per page
           <select
-            aria-label="Rows per page"
             value={pageSize}
             onChange={(event) => {
               table.setPageSize(Number(event.target.value));
@@ -504,6 +562,8 @@ export function AppDataTable<TData extends RowData>({
         <div className="app-table-pager-actions">
           <p>
             {start}–{end} of {total}
+            {" · "}
+            Page {total === 0 ? 0 : pageIndex + 1} of {Math.max(table.getPageCount(), total === 0 ? 0 : 1)}
           </p>
           <button type="button" className="table-page-btn" aria-label="First page" onClick={() => table.firstPage()} disabled={!table.getCanPreviousPage()}>
             <ChevronsLeft size={16} />

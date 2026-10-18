@@ -29,6 +29,7 @@ export const listPending = query({
 export const inviteForRevoke = internalQuery({
   args: { email: v.string() },
   returns: v.object({
+    inviteId: v.id("invites"),
     clerkId: v.union(v.string(), v.null()),
     clerkInvitationId: v.union(v.string(), v.null()),
   }),
@@ -43,6 +44,7 @@ export const inviteForRevoke = internalQuery({
       throw new ConvexError("That invite is not pending for this company.");
     }
     return {
+      inviteId: invite._id,
       clerkId: invite.clerkId ?? null,
       clerkInvitationId: invite.clerkInvitationId ?? null,
     };

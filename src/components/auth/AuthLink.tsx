@@ -3,7 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 
-// Renders a text link used on the sign-in and sign-up screens.
+// Renders a link that opens the dashboard when the visitor is already signed in.
 export function AuthLink({
   href,
   className,

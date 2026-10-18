@@ -7,8 +7,11 @@ import { ConvexClientProvider } from "@/components/ui/ConvexClientProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Chae",
-  description: "Simple role-based access control for your entire team.",
+  title: {
+    default: "Chae",
+    template: "%s · Chae",
+  },
+  description: "Job sites, timesheets, invoices, and holidays for your company.",
 };
 
 // Holds the page shell while auth state is still resolving.
@@ -24,7 +27,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{if(location.pathname!=='/'){var t=localStorage.getItem('chae-theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t;}}catch(e){}",
+              "try{var p=location.pathname;if(p!=='/'&&p!=='/documentation'&&p!=='/privacy'&&p!=='/terms'){var t=localStorage.getItem('chae-theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t;}}catch(e){}",
           }}
         />
       </head>

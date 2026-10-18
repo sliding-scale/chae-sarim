@@ -1,5 +1,6 @@
 "use client";
 
+import { ContentHeading } from "@/components/dashboard/ContentHeading";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { CompanySettings } from "@/components/profile/CompanySettings";
 import { UserAvatar } from "@/components/users/UserAvatar";
@@ -107,12 +108,12 @@ export function ProfileSettings() {
 
   return (
     <div className="profile-layout">
+      <ContentHeading title="Profile" description="Update how your name and photo appear in the dashboard." />
       <section className="profile-section" aria-labelledby="personal-profile-heading">
         <header className="profile-section-heading">
           <h2 id="personal-profile-heading" className="profile-section-title">
             Personal profile
           </h2>
-          <p className="page-description">Update how your name and photo appear in the dashboard.</p>
         </header>
 
       <form className="saas-card panel profile-card" onSubmit={onSave}>
@@ -130,7 +131,7 @@ export function ProfileSettings() {
               id="profile-photo"
               className="visually-hidden"
               type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
+              accept="image/png,image/jpeg,image/webp"
               onChange={(event) => {
                 const next = event.target.files?.[0] ?? null;
                 if (next && next.size > 5 * 1024 * 1024) {

@@ -39,7 +39,7 @@ export function ActivityFeed({ items }: { items: readonly ActivityItem[] }) {
     <div className="activity-list">
       {items.map((item) => (
         <article key={item.id} className="activity-row">
-          <UserAvatar name={item.actor === "You" ? "Alex Johnson" : item.actor} />
+          <UserAvatar name={item.actor} />
           <div>
             <p className="activity-line">
               <strong>{item.actor}</strong> {item.action}

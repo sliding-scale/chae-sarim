@@ -1,6 +1,6 @@
 "use client";
 
-import { RequiredMark } from "@/components/ui/RequiredMark";
+import { AuthInput } from "@/components/auth/AuthInput";
 import { useUser } from "@clerk/nextjs";
 import { FormEvent, useState } from "react";
 
@@ -58,51 +58,33 @@ export function ChangePassword() {
         This account was created with a temporary password. Enter that password, then choose one you will use
         from now on.
       </p>
-      <div className="field">
-        <label className="form-label" htmlFor="current-password">
-          Temporary password
-          <RequiredMark />
-        </label>
-        <input
-          id="current-password"
-          className="input-saas"
-          type="password"
-          autoComplete="current-password"
-          value={currentPassword}
-          disabled={busy}
-          onChange={(event) => setCurrentPassword(event.target.value)}
-        />
-      </div>
-      <div className="field">
-        <label className="form-label" htmlFor="new-password">
-          New password
-          <RequiredMark />
-        </label>
-        <input
-          id="new-password"
-          className="input-saas"
-          type="password"
-          autoComplete="new-password"
-          value={newPassword}
-          disabled={busy}
-          onChange={(event) => setNewPassword(event.target.value)}
-        />
-      </div>
-      <div className="field">
-        <label className="form-label" htmlFor="confirm-password">
-          Confirm new password
-          <RequiredMark />
-        </label>
-        <input
-          id="confirm-password"
-          className="input-saas"
-          type="password"
-          autoComplete="new-password"
-          value={confirmPassword}
-          disabled={busy}
-          onChange={(event) => setConfirmPassword(event.target.value)}
-        />
-      </div>
+      <AuthInput
+        id="current-password"
+        label="Temporary password"
+        type="password"
+        autoComplete="current-password"
+        value={currentPassword}
+        disabled={busy}
+        onChange={(event) => setCurrentPassword(event.target.value)}
+      />
+      <AuthInput
+        id="new-password"
+        label="New password"
+        type="password"
+        autoComplete="new-password"
+        value={newPassword}
+        disabled={busy}
+        onChange={(event) => setNewPassword(event.target.value)}
+      />
+      <AuthInput
+        id="confirm-password"
+        label="Confirm new password"
+        type="password"
+        autoComplete="new-password"
+        value={confirmPassword}
+        disabled={busy}
+        onChange={(event) => setConfirmPassword(event.target.value)}
+      />
       {error ? <p className="field-error">{error}</p> : null}
       <button className="btn-primary" type="submit" disabled={busy}>
         {busy ? "Saving…" : "Save password"}

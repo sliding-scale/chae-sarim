@@ -6,13 +6,11 @@ type ReviewRow = { status: "pending" | "approved" | "rejected" };
 // Shows the four review totals and the submitted-records card from the admin designs.
 export function ReviewBoard({
   title,
-  noun,
   rows,
   error,
   children,
 }: {
   title: string;
-  noun: string;
   rows: ReviewRow[] | undefined;
   error?: string;
   children: ReactNode;
@@ -24,16 +22,16 @@ export function ReviewBoard({
 
   return (
     <div className="admin-review">
-      <section className="home-stats" aria-label={`${title} summary`}>
-        <Metric icon={ClipboardList} tone="blue" label="Total Submitted" value={total} note={`${noun} this period`} />
-        <Metric icon={Clock3} tone="amber" label="Pending Review" value={pending} note="awaiting approval" />
-        <Metric icon={CircleCheck} tone="green" label="Approved" value={approved} note={`${noun} approved`} />
-        <Metric icon={CircleX} tone="rose" label="Rejected" value={rejected} note={`${noun} rejected`} />
+      <section className="admin-metrics" aria-label={`${title} summary`}>
+        <Metric icon={ClipboardList} label="Total submitted" value={total} />
+        <Metric icon={Clock3} tone="amber" label="Pending review" value={pending} />
+        <Metric icon={CircleCheck} label="Approved" value={approved} />
+        <Metric icon={CircleX} tone="rose" label="Rejected" value={rejected} />
       </section>
       <section className="admin-table-card">
         <header className="admin-card-heading">
           <h2>{title}</h2>
-          <span className="admin-pending">
+          <span className={pending ? "admin-pending" : "admin-pending is-clear"}>
             <Clock3 size={16} aria-hidden="true" />
             {pending === undefined ? "—" : pending === 1 ? "1 pending" : `${pending} pending`}
           </span>
@@ -51,22 +49,21 @@ function Metric({
   tone,
   label,
   value,
-  note,
 }: {
   icon: typeof ClipboardList;
-  tone: "blue" | "green" | "amber" | "rose";
+  tone?: "amber" | "rose";
   label: string;
   value: number | undefined;
-  note: string;
 }) {
   return (
-    <article className={`home-stat is-${tone}`}>
-      <span className="home-bubble">
+    <article className={tone ? `admin-metric is-${tone}` : "admin-metric"}>
+      <span>
         <Icon aria-hidden="true" />
       </span>
-      <p>{label}</p>
-      <strong>{value === undefined ? "—" : String(value)}</strong>
-      <small>{note}</small>
+      <div>
+        <p>{label}</p>
+        <strong>{value === undefined ? "—" : String(value)}</strong>
+      </div>
     </article>
   );
 }

@@ -12,6 +12,7 @@ import {
 import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { RequiredMark } from "@/components/ui/RequiredMark";
+import { ContentHeading } from "@/components/dashboard/ContentHeading";
 import { NoSitesNotice } from "@/components/dashboard/NoSitesNotice";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
@@ -83,22 +84,23 @@ export function WorkerHolidaysPanel() {
 
   return (
     <>
+      <ContentHeading title="Holidays" description="Request a holiday and follow each decision." />
       <section className="worker-card time-off-card">
         <div className="time-off-head">
           <span className="time-off-icon">
             <CalendarClock aria-hidden="true" />
           </span>
           <div className="time-off-copy">
-            <h2 className="panel-title">Request time off</h2>
+            <h2 className="panel-title">Request a holiday</h2>
             <p className="panel-copy">
-              Request time off for {company}. An admin reviews the request after you submit.
+              Request a holiday for {company}. An administrator reviews it after you submit.
             </p>
           </div>
         </div>
         {sites === undefined ? (
           <p className="invite-note">Loading job sites…</p>
         ) : sites.length === 0 ? (
-          <NoSitesNotice message="Ask an administrator to assign a job site before you request time off." />
+          <NoSitesNotice message="Ask an administrator to assign a job site before you request a holiday." />
         ) : (
           <form className="time-off-form" onSubmit={onSubmit} noValidate>
             <div className="time-off-grid">
@@ -165,23 +167,25 @@ export function WorkerHolidaysPanel() {
                 onChange={(event) => setReason(event.target.value)}
               />
             </div>
-            <button
-              className="btn-primary"
-              type="submit"
-              disabled={busy || !jobSiteId || !startDate || !endDate || !reason.trim()}
-            >
-              {busy ? "Saving…" : "Submit request"}
-            </button>
+            <div className="timesheet-submit">
+              <button
+                className="btn-primary"
+                type="submit"
+                disabled={busy || !jobSiteId || !startDate || !endDate || !reason.trim()}
+              >
+                {busy ? "Saving…" : "Submit holiday"}
+              </button>
+            </div>
             {error ? <p className="field-error">{error}</p> : null}
           </form>
         )}
       </section>
 
       <section className="worker-card">
-        <h2 className="panel-title">Your requests</h2>
-        <p className="panel-copy">Holiday requests you have submitted for {company}.</p>
+        <h2 className="panel-title">Your holidays</h2>
+        <p className="panel-copy">Holidays you have submitted for {company}.</p>
         {holidays === undefined ? (
-          <p className="invite-note">Loading holiday requests…</p>
+          <p className="invite-note">Loading holidays…</p>
         ) : (
           <HolidayTable rows={holidays} />
         )}
@@ -198,7 +202,7 @@ function HolidayTable({ rows }: { rows: HolidayRow[] }) {
     () =>
       workerHolidayColumns.columns([
         workerHolidayColumns.accessor("jobSiteName", {
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Job Site" />,
           cell: ({ row }) => <TableName>{row.original.jobSiteName}</TableName>,
           sortFn: "text",
         }),
@@ -222,7 +226,9 @@ function HolidayTable({ rows }: { rows: HolidayRow[] }) {
                   ? "success"
                   : row.original.status === "rejected"
                     ? "danger"
-                    : "warning"
+                    : row.original.status === "draft"
+                      ? "draft"
+                      : "warning"
               }
             />
           ),
@@ -231,7 +237,7 @@ function HolidayTable({ rows }: { rows: HolidayRow[] }) {
         workerHolidayColumns.accessor((row) => row.rejectionReason ?? "", {
           id: "rejectionReason",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Rejection reason" />,
-          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" />,
+          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" tone="danger" />,
           sortFn: "text",
         }),
       ]),
@@ -242,11 +248,11 @@ function HolidayTable({ rows }: { rows: HolidayRow[] }) {
     <AppDataTable
       columns={columns}
       data={rows}
-      searchPlaceholder="Search requests..."
+      searchPlaceholder="Search by job site or reason…"
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
       empty={{
-        title: "No holiday requests yet",
-        description: "Submitted requests will appear here once you request time off.",
+        title: "No holidays yet",
+        description: "Your holidays will appear here once you submit one.",
       }}
     />
   );

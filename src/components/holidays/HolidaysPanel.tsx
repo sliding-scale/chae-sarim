@@ -1,10 +1,12 @@
 "use client";
 
+import { ContentHeading } from "@/components/dashboard/ContentHeading";
 import { ReviewBoard } from "@/components/dashboard/ReviewBoard";
 import {
   AppDataTable,
   DataTableColumnHeader,
   TableIconText,
+  TableJobSite,
   TableLongText,
   TablePerson,
   TableStatus,
@@ -17,7 +19,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
-import { CalendarDays, MapPin } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { useMemo, useState } from "react";
 
 type HolidayStatus = "pending" | "approved" | "rejected";
@@ -41,7 +43,7 @@ function errorText(error: unknown, fallback: string) {
 }
 
 // Lets an admin review submitted holiday requests and approve or reject the ones still pending.
-export function HolidaysPanel() {
+export function HolidaysPanel({ status }: { status?: "approved" }) {
   const holidays = useQuery(api.holidays.queries.listHolidays);
   const decideHoliday = useMutation(api.holidays.mutations.decideHoliday);
   const [error, setError] = useState("");
@@ -76,13 +78,16 @@ export function HolidaysPanel() {
   }
 
   return (
-    <ReviewBoard title="Submitted Holidays" noun="holidays" rows={rows} error={error}>
+    <>
+      <ContentHeading title="Holidays" description="Review holiday requests from workers." />
+      <ReviewBoard title="Submitted holidays" rows={rows} error={error}>
       {rows === undefined ? (
-        <p className="invite-note">Loading holiday requests…</p>
+        <p className="invite-note">Loading holidays…</p>
       ) : (
         <HolidayTable rows={rows} busyId={busyId} onDecide={onDecide} />
       )}
     </ReviewBoard>
+    </>
   );
 }
 
@@ -108,8 +113,8 @@ function HolidayTable({
           sortFn: "text",
         }),
         holidayColumns.accessor("jobSiteName", {
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
-          cell: ({ row }) => <TableIconText icon={MapPin}>{row.original.jobSiteName}</TableIconText>,
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Job Site" />,
+          cell: ({ row }) => <TableJobSite name={row.original.jobSiteName} />,
           sortFn: "text",
         }),
         holidayColumns.accessor("startDate", {
@@ -137,14 +142,14 @@ function HolidayTable({
         holidayColumns.accessor((row) => row.rejectionReason ?? "", {
           id: "rejectionReason",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Rejection reason" />,
-          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" />,
+          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" tone="danger" />,
           sortFn: "text",
         }),
         ...(onDecide
           ? [
               holidayColumns.display({
                 id: "actions",
-                header: "Actions",
+                header: () => <span className="table-sort">Actions</span>,
                 enableSorting: false,
                 enableGlobalFilter: false,
                 cell: ({ row }) => {
@@ -175,13 +180,15 @@ function HolidayTable({
 
   return (
     <AppDataTable
+      key={status ?? "all"}
       columns={columns}
       data={rows}
-      searchPlaceholder="Search by worker, job site or reason..."
+      searchPlaceholder="Search by worker, job site or reason…"
+      initialFacets={status === "approved" ? { status: ["Approved"] } : undefined}
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
       empty={{
-        title: "No holiday requests yet",
-        description: "When workers request time off, they will appear here for your review.",
+        title: "No holidays yet",
+        description: "When workers request a holiday, it will appear here for review.",
       }}
     />
   );
@@ -195,6 +202,6 @@ function statusLabel(status: HolidayStatus) {
 }
 
 // Shows the holiday review page for the signed-in admin's company.
-export function AdminHolidaysPage() {
-  return <HolidaysPanel />;
+export function AdminHolidaysPage({ status }: { status?: "approved" }) {
+  return <HolidaysPanel status={status} />;
 }

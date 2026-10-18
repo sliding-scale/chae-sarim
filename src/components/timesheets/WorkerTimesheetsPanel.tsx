@@ -13,6 +13,7 @@ import {
 import type { DataTableFeatures } from "@/components/lists/data-table-features";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { RequiredMark } from "@/components/ui/RequiredMark";
+import { ContentHeading } from "@/components/dashboard/ContentHeading";
 import { NoSitesNotice } from "@/components/dashboard/NoSitesNotice";
 import { useWorkspace } from "@/components/layout/RoleGate";
 import { api } from "../../../convex/_generated/api";
@@ -64,17 +65,6 @@ function isoDate(date: Date) {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
-// Formats a YYYY-MM-DD date without shifting it across time zones.
-function formatDay(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return value;
-  return new Date(year, month - 1, day).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 // Formats an hour count, keeping a decimal only when the value is not whole.
 function formatHours(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -104,7 +94,7 @@ function weekChoices() {
     const end = new Date(start);
     end.setDate(start.getDate() + 6);
     const weekStart = isoDate(start);
-    const label = `${formatDay(weekStart)} – ${formatDay(isoDate(end))}`;
+    const label = formatDateRange(weekStart, isoDate(end));
     return { weekStart, label: index === 0 ? `This week (${label})` : label };
   });
 }
@@ -164,6 +154,7 @@ export function WorkerTimesheetsPanel() {
 
   return (
     <>
+      <ContentHeading title="Timesheets" description="Submit the hours you worked and follow each week." />
       <section className="worker-card time-off-card">
         <div className="time-off-head">
           <span className="time-off-icon">
@@ -172,7 +163,7 @@ export function WorkerTimesheetsPanel() {
           <div className="time-off-copy">
             <h2 className="panel-title">Submit a week</h2>
             <p className="panel-copy">
-              Record the hours you worked for {company}. An admin reviews the week after you submit.
+              Record the hours you worked for {company}. An administrator reviews the week after you submit. A blank day counts as 0.
             </p>
           </div>
         </div>
@@ -245,7 +236,7 @@ function TimesheetForm({
   }, 0);
   const hoursReady = dayLabels.every(([key]) => {
     const raw = hours[key].trim();
-    if (!raw) return false;
+    if (!raw) return true;
     const value = Number(raw);
     return Number.isFinite(value) && value >= 0 && value <= 24;
   });
@@ -291,7 +282,7 @@ function TimesheetForm({
   return (
     <form className="timesheet-form" onSubmit={onSubmit} noValidate>
       {existing?.status === "rejected" && existing.rejectionReason ? (
-        <p className="panel-copy">Rejected: {existing.rejectionReason}</p>
+        <p className="field-error">Rejected: {existing.rejectionReason}</p>
       ) : null}
       <div className="timesheet-fields">
         <div>
@@ -335,16 +326,12 @@ function TimesheetForm({
       </div>
 
       <fieldset className="hours-fieldset" disabled={busy || locked}>
-        <legend className="form-label">
-          Hours
-          <RequiredMark />
-        </legend>
+        <legend className="form-label">Hours</legend>
         <div className="hours-grid">
           {dayLabels.map(([key, label]) => (
             <div key={key}>
               <label className="form-label" htmlFor={`hours-${key}`}>
                 {label}
-                <RequiredMark />
               </label>
               <input
                 id={`hours-${key}`}
@@ -403,7 +390,7 @@ function TimesheetTable({ rows }: { rows: TimesheetRow[] }) {
     () =>
       workerTimesheetColumns.columns([
         workerTimesheetColumns.accessor("jobSiteName", {
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Job site" />,
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Job Site" />,
           cell: ({ row }) => <TableName>{row.original.jobSiteName}</TableName>,
           sortFn: "text",
         }),
@@ -438,7 +425,9 @@ function TimesheetTable({ rows }: { rows: TimesheetRow[] }) {
                   ? "success"
                   : row.original.status === "rejected"
                     ? "danger"
-                    : "warning"
+                    : row.original.status === "draft"
+                      ? "draft"
+                      : "warning"
               }
             />
           ),
@@ -447,7 +436,7 @@ function TimesheetTable({ rows }: { rows: TimesheetRow[] }) {
         workerTimesheetColumns.accessor((row) => row.rejectionReason ?? "", {
           id: "rejectionReason",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Rejection reason" />,
-          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" />,
+          cell: ({ row }) => <TableLongText text={row.original.rejectionReason} title="Rejection reason" tone="danger" />,
           sortFn: "text",
         }),
       ]),
@@ -458,7 +447,7 @@ function TimesheetTable({ rows }: { rows: TimesheetRow[] }) {
     <AppDataTable
       columns={columns}
       data={rows}
-      searchPlaceholder="Search timesheets..."
+      searchPlaceholder="Search by job site or week…"
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
       empty={{
         title: "No timesheets yet",

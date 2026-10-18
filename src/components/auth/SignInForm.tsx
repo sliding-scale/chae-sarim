@@ -67,7 +67,7 @@ export function SignInForm() {
   async function onSignIn(event: React.FormEvent) {
     event.preventDefault();
     const next: { email?: string; password?: string } = {};
-    if (!email.includes("@")) next.email = "Enter a valid work email.";
+    if (!email.includes("@")) next.email = "Enter a valid email.";
     if (!password) next.password = "Enter your password.";
     setFieldErrors(next);
     setLocalError(null);
@@ -247,7 +247,7 @@ export function SignInForm() {
           />
           <button className="btn-primary btn-block" type="submit" disabled={busy || googleBusy}>
             {signingIn ? <span className="spinner" aria-hidden="true" /> : null}
-            {signingIn ? "Signing in..." : "Sign in"}
+            {signingIn ? "Signing in…" : "Sign in"}
           </button>
         </form>
       ) : null}
@@ -264,7 +264,7 @@ export function SignInForm() {
             onChange={(event) => setEmail(event.target.value)}
           />
           <button className="btn-primary btn-block" type="submit" disabled={busy}>
-            {busy ? "Sending code..." : "Send reset code"}
+            {busy ? "Sending code…" : "Send reset code"}
           </button>
           <p className="auth-switch">
             <button type="button" className="link-button" onClick={() => setStep("credentials")}>
@@ -302,7 +302,7 @@ export function SignInForm() {
             onChange={(event) => setNextPassword(event.target.value)}
           />
           <button className="btn-primary btn-block" type="submit" disabled={busy}>
-            {busy ? "Updating password..." : "Update password"}
+            {busy ? "Updating password…" : "Update password"}
           </button>
         </form>
       ) : null}
@@ -328,7 +328,7 @@ export function SignInForm() {
           />
           {notice ? <p className="auth-note">{notice}</p> : null}
           <button className="btn-primary btn-block" type="submit" disabled={busy}>
-            {busy ? "Signing in..." : "Continue"}
+            {busy ? "Signing in…" : "Continue"}
           </button>
         </form>
       ) : null}
@@ -337,7 +337,7 @@ export function SignInForm() {
           <div className="auth-divider">OR</div>
           <button className="btn-secondary btn-block" type="button" onClick={onGoogle} disabled={busy || googleBusy}>
             {googleBusy ? <span className="spinner" aria-hidden="true" /> : <GoogleLogo />}
-            {googleBusy ? "Continuing..." : "Continue with Google"}
+            {googleBusy ? "Continuing…" : "Continue with Google"}
           </button>
           <p className="auth-switch">
             Don&apos;t have an account? <Link href="/sign-up">Create one</Link>

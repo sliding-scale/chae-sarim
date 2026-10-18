@@ -90,7 +90,7 @@ export function SignUpForm() {
     event.preventDefault();
     const next: Record<string, string> = {};
     if (name.trim().length < 2) next.name = "Enter your full name.";
-    if (!email.includes("@")) next.email = "Enter a valid work email.";
+    if (!email.includes("@")) next.email = "Enter a valid email.";
     if (!password) next.password = "Enter a password.";
     if (confirm !== password) next.confirm = "Passwords do not match.";
     setFieldErrors(next);
@@ -208,15 +208,18 @@ export function SignUpForm() {
           />
           <button className="btn-primary btn-block" type="submit" disabled={busy}>
             {busy ? <span className="spinner" aria-hidden="true" /> : null}
-            {busy ? "Joining..." : "Join company"}
+            {busy ? "Joining…" : "Join company"}
           </button>
+          <p className="auth-copy">
+            By joining, you agree to our <Link href="/terms">Terms</Link> and <Link href="/privacy">Privacy Policy</Link>.
+          </p>
         </form>
       </AuthCard>
     );
   }
 
   return (
-    <AuthCard title="Create your dashboard" description="Set up your account and start managing access.">
+    <AuthCard title="Create your dashboard" description="Set up your company, then invite workers.">
       <AuthError message={alert} />
       <div id="clerk-captcha" />
       {verify ? (
@@ -239,7 +242,7 @@ export function SignUpForm() {
           {notice ? <p className="auth-note">{notice}</p> : null}
           <button className="btn-primary btn-block" type="submit" disabled={busy}>
             {busy ? <span className="spinner" aria-hidden="true" /> : null}
-            {busy ? "Creating account..." : "Verify email"}
+            {busy ? "Creating account…" : "Verify email"}
           </button>
         </form>
       ) : (
@@ -285,7 +288,7 @@ export function SignUpForm() {
           />
           <button className="btn-primary btn-block" type="submit" disabled={busy || googleBusy}>
             {creating ? <span className="spinner" aria-hidden="true" /> : null}
-            {creating ? "Creating account..." : "Create account"}
+            {creating ? "Creating account…" : "Create account"}
           </button>
           <p className="terms-note">
             By creating an account, you agree to our <Link href="/terms">Terms</Link> and{" "}
@@ -298,7 +301,7 @@ export function SignUpForm() {
           <div className="auth-divider">OR</div>
           <button className="btn-secondary btn-block" type="button" onClick={onGoogle} disabled={busy || googleBusy}>
             {googleBusy ? <span className="spinner" aria-hidden="true" /> : <GoogleLogo />}
-            {googleBusy ? "Continuing..." : "Continue with Google"}
+            {googleBusy ? "Continuing…" : "Continue with Google"}
           </button>
         </>
       )}
