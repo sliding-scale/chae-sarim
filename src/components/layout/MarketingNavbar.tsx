@@ -12,8 +12,8 @@ import { useEffect, useRef, useState } from "react";
 
 const links = [
   { href: "/#product", label: "Product" },
-  { href: "/#security", label: "Roles" },
-  { href: "/#pricing", label: "Pricing" },
+  { href: "/#how-it-works", label: "How it works" },
+  { href: "/#roles", label: "Roles" },
 ];
 
 // Renders the public site navigation.

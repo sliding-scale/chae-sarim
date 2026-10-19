@@ -365,6 +365,7 @@ export function AppDataTable<TData extends RowData>({
   initialSearch = "",
   initialFacets = {},
   filters = [],
+  rowSearch,
   empty,
 }: {
   columns: ColumnDef<DataTableFeatures, TData>[];
@@ -373,6 +374,7 @@ export function AppDataTable<TData extends RowData>({
   initialSearch?: string;
   initialFacets?: Record<string, string[]>;
   filters?: TableFacet<TData>[];
+  rowSearch?: (row: TData) => string;
   empty?: { title: string; description: string };
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -399,7 +401,18 @@ export function AppDataTable<TData extends RowData>({
     features,
     data: filtered,
     columns,
-    globalFilterFn: "includesString",
+    globalFilterFn: rowSearch
+      ? (_row, _columnId, filterValue) => {
+          const words = String(filterValue ?? "")
+            .trim()
+            .toLowerCase()
+            .split(/\s+/)
+            .filter(Boolean);
+          if (words.length === 0) return true;
+          const text = rowSearch(_row.original).toLowerCase();
+          return words.every((word) => text.includes(word));
+        }
+      : "includesString",
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onPaginationChange: setPagination,

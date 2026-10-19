@@ -138,7 +138,7 @@ function hoursFromForm(hours: HoursForm) {
 }
 
 // Lets a worker submit weekly hours for one job site in their company.
-export function WorkerTimesheetsPanel() {
+export function WorkerTimesheetsPanel({ query = "" }: { query?: string }) {
   const workspace = useWorkspace();
   const company = workspace.tenantName ?? "your company";
   const sites = useQuery(api.jobSites.queries.listWorkerJobSites);
@@ -192,7 +192,7 @@ export function WorkerTimesheetsPanel() {
         {timesheets === undefined ? (
           <p className="invite-note">Loading timesheets…</p>
         ) : (
-          <TimesheetTable rows={timesheets} />
+          <TimesheetTable rows={timesheets} query={query} />
         )}
       </section>
     </>
@@ -385,7 +385,7 @@ function TimesheetForm({
 const workerTimesheetColumns = createColumnHelper<DataTableFeatures, TimesheetRow>();
 
 // Renders the worker's submitted weeks.
-function TimesheetTable({ rows }: { rows: TimesheetRow[] }) {
+function TimesheetTable({ rows, query }: { rows: TimesheetRow[]; query: string }) {
   const columns = useMemo(
     () =>
       workerTimesheetColumns.columns([
@@ -445,9 +445,12 @@ function TimesheetTable({ rows }: { rows: TimesheetRow[] }) {
 
   return (
     <AppDataTable
+      key={query}
       columns={columns}
       data={rows}
       searchPlaceholder="Search by job site or week…"
+      initialSearch={query}
+      rowSearch={timesheetSearch}
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
       empty={{
         title: "No timesheets yet",
@@ -455,6 +458,18 @@ function TimesheetTable({ rows }: { rows: TimesheetRow[] }) {
       }}
     />
   );
+}
+
+// Joins the fields a worker can type to find one timesheet.
+function timesheetSearch(row: TimesheetRow) {
+  return [
+    row.jobSiteName,
+    formatDateRange(row.weekStart, row.weekEnd),
+    row.weekStart,
+    row.comments ?? "",
+    statusLabel(row.status),
+    row.rejectionReason ?? "",
+  ].join(" ");
 }
 
 // Returns the plain status label for a timesheet.
@@ -466,6 +481,6 @@ function statusLabel(status: TimesheetStatus) {
 }
 
 // Shows the timesheet page for the signed-in worker.
-export function WorkerTimesheetsPage() {
-  return <WorkerTimesheetsPanel />;
+export function WorkerTimesheetsPage({ query = "" }: { query?: string }) {
+  return <WorkerTimesheetsPanel query={query} />;
 }

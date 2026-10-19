@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { ThemeSync } from "@/components/theme/ThemeSync";
 import { ConvexClientProvider } from "@/components/ui/ConvexClientProvider";
 import "./globals.css";
+import "./dashboard/dashboard.css";
 
 export const metadata: Metadata = {
   title: {

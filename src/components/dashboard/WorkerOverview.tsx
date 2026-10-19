@@ -1,6 +1,7 @@
 "use client";
 
 import { useWorkspace } from "@/components/layout/RoleGate";
+import { formatDateRange } from "@/components/lists/AppDataTable";
 import { homeWindow } from "@/lib/home-window";
 import { useGreeting } from "@/lib/use-greeting";
 import { api } from "../../../convex/_generated/api";
@@ -11,7 +12,28 @@ import { useEffect, useState } from "react";
 
 const siteTones = ["green", "blue", "amber", "purple"] as const;
 
-type ActivityStatus = "draft" | "pending" | "approved" | "rejected" | null;
+type ActivityStatus = "draft" | "pending" | "approved" | "rejected";
+
+type TimesheetActivity = {
+  status: ActivityStatus;
+  weekStart: string;
+  weekEnd: string;
+  jobSiteName: string;
+} | null;
+
+type InvoiceActivity = {
+  status: ActivityStatus;
+  invoiceMonth: string;
+  jobSiteName: string;
+  fileName: string | null;
+} | null;
+
+type HolidayActivity = {
+  status: ActivityStatus;
+  startDate: string;
+  endDate: string;
+  jobSiteName: string;
+} | null;
 
 // Shows the signed-in worker's shortcuts, job sites, and this month.
 export function WorkerDashboardPage() {
@@ -91,9 +113,33 @@ export function WorkerDashboardPage() {
               <h2>Recent activity</h2>
             </div>
           </header>
-          <ActivityRow tone="timesheet" icon={ClipboardList} label="Timesheet" status={home?.timesheetStatus ?? null} ready={home !== undefined} />
-          <ActivityRow tone="invoice" icon={FileText} label="Invoice" status={home?.invoiceStatus ?? null} ready={home !== undefined} />
-          <ActivityRow tone="holiday" icon={CalendarOff} label="Holiday" status={home?.holidayStatus ?? null} ready={home !== undefined} />
+          <ActivityRow
+            tone="timesheet"
+            icon={ClipboardList}
+            label="Timesheet"
+            detail={home ? timesheetDetail(home.timesheet) : null}
+            status={home?.timesheet?.status ?? null}
+            href={home?.timesheet ? listHref("/dashboard/worker/timesheets", timesheetQuery(home.timesheet)) : null}
+            ready={home !== undefined}
+          />
+          <ActivityRow
+            tone="invoice"
+            icon={FileText}
+            label="Invoice"
+            detail={home ? invoiceDetail(home.invoice) : null}
+            status={home?.invoice?.status ?? null}
+            href={home?.invoice ? listHref("/dashboard/worker/invoices", invoiceQuery(home.invoice)) : null}
+            ready={home !== undefined}
+          />
+          <ActivityRow
+            tone="holiday"
+            icon={CalendarOff}
+            label="Holiday"
+            detail={home ? holidayDetail(home.holiday) : null}
+            status={home?.holiday?.status ?? null}
+            href={home?.holiday ? listHref("/dashboard/worker/holidays", holidayQuery(home.holiday)) : null}
+            ready={home !== undefined}
+          />
         </article>
         <article className="home-panel">
           <header className="home-panel-header">
@@ -135,13 +181,60 @@ function siteTone(name: string) {
   return siteTones[hash];
 }
 
-// Turns the latest submission status into a short activity line.
-function activityText(status: ActivityStatus) {
-  if (status === "draft") return "Draft saved";
-  if (status === "pending") return "Waiting for review";
-  if (status === "approved") return "Approved";
-  if (status === "rejected") return "Rejected";
-  return "Nothing submitted yet";
+// Builds the timesheet search used by the timesheets table.
+function timesheetQuery(activity: NonNullable<TimesheetActivity>) {
+  return `${formatDateRange(activity.weekStart, activity.weekEnd)} ${activity.jobSiteName}`;
+}
+
+// Names the timesheet that was last submitted or decided.
+function timesheetDetail(activity: TimesheetActivity) {
+  if (!activity) return null;
+  return `${formatDateRange(activity.weekStart, activity.weekEnd)} at ${activity.jobSiteName}`;
+}
+
+// Formats a YYYY-MM month the same way the invoice table searches it.
+function formatInvoiceMonth(value: string) {
+  const [year, month] = value.split("-").map(Number);
+  if (!year || !month) return value;
+  return new Date(year, month - 1, 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+}
+
+// Builds the invoice search used by the invoices table.
+function invoiceQuery(activity: NonNullable<InvoiceActivity>) {
+  const file = activity.fileName ? ` ${activity.fileName}` : "";
+  return `${formatInvoiceMonth(activity.invoiceMonth)} ${activity.jobSiteName}${file}`;
+}
+
+// Names the invoice that was last submitted or decided.
+function invoiceDetail(activity: InvoiceActivity) {
+  if (!activity) return null;
+  const file = activity.fileName ? ` (${activity.fileName})` : "";
+  return `${formatInvoiceMonth(activity.invoiceMonth)} invoice for ${activity.jobSiteName}${file}`;
+}
+
+// Builds the holiday search used by the holidays table.
+function holidayQuery(activity: NonNullable<HolidayActivity>) {
+  return `${formatDateRange(activity.startDate, activity.endDate)} ${activity.jobSiteName}`;
+}
+
+// Names the holiday request that was last submitted or decided.
+function holidayDetail(activity: HolidayActivity) {
+  if (!activity) return null;
+  return `${formatDateRange(activity.startDate, activity.endDate)} at ${activity.jobSiteName}`;
+}
+
+// Points a list page at one searched record.
+function listHref(path: string, query: string) {
+  return `${path}?q=${encodeURIComponent(query)}`;
+}
+
+// Turns the latest update into a line that names the record and its outcome.
+function activityText(status: ActivityStatus | null, detail: string | null) {
+  if (!status || !detail) return "Nothing submitted yet";
+  if (status === "draft") return `Draft saved for ${detail}`;
+  if (status === "pending") return `${detail} submitted and pending review`;
+  if (status === "approved") return `${detail} approved`;
+  return `${detail} rejected`;
 }
 
 // Shows the latest status for one kind of worker record.
@@ -149,23 +242,34 @@ function ActivityRow({
   tone,
   icon: Icon,
   label,
+  detail,
   status,
+  href,
   ready,
 }: {
   tone: "timesheet" | "invoice" | "holiday";
   icon: typeof FileText;
   label: string;
-  status: ActivityStatus;
+  detail: string | null;
+  status: ActivityStatus | null;
+  href: string | null;
   ready: boolean;
 }) {
-  return (
-    <div className={`home-activity is-${tone}`}>
+  const className = `home-activity is-${tone}`;
+  const body = (
+    <>
       <span>
         <Icon aria-hidden="true" />
       </span>
       <strong>{label}</strong>
-      <small>{ready ? activityText(status) : "—"}</small>
-    </div>
+      <small>{ready ? activityText(status, detail) : "—"}</small>
+    </>
+  );
+  if (!href) return <div className={className}>{body}</div>;
+  return (
+    <Link href={href} className={className}>
+      {body}
+    </Link>
   );
 }
 

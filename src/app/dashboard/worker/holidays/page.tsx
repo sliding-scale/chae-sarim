@@ -6,6 +6,12 @@ export const metadata = { title: "Holidays" };
 export const instant = false;
 
 // Shows the holiday request page for the signed-in worker.
-export default function Page() {
-  return <WorkerHolidaysPage />;
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string | string[] }>;
+}) {
+  const { q } = await searchParams;
+  const query = Array.isArray(q) ? (q[0] ?? "") : (q ?? "");
+  return <WorkerHolidaysPage query={query} />;
 }

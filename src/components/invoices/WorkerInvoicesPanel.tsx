@@ -79,7 +79,7 @@ function contentType(file: File) {
 }
 
 // Lets a worker upload an invoice for one job site in their company.
-export function WorkerInvoicesPanel() {
+export function WorkerInvoicesPanel({ query = "" }: { query?: string }) {
   const workspace = useWorkspace();
   const company = workspace.tenantName ?? "your company";
   const sites = useQuery(api.jobSites.queries.listWorkerJobSites);
@@ -251,7 +251,7 @@ export function WorkerInvoicesPanel() {
         {invoices === undefined ? (
           <p className="invite-note">Loading invoices…</p>
         ) : (
-          <InvoiceTable rows={invoices} />
+          <InvoiceTable rows={invoices} query={query} />
         )}
       </section>
     </>
@@ -261,7 +261,7 @@ export function WorkerInvoicesPanel() {
 const workerInvoiceColumns = createColumnHelper<DataTableFeatures, InvoiceRow>();
 
 // Renders the worker's uploaded invoices.
-function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
+function InvoiceTable({ rows, query }: { rows: InvoiceRow[]; query: string }) {
   const columns = useMemo(
     () =>
       workerInvoiceColumns.columns([
@@ -321,9 +321,12 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
 
   return (
     <AppDataTable
+      key={query}
       columns={columns}
       data={rows}
       searchPlaceholder="Search by job site or month…"
+      initialSearch={query}
+      rowSearch={invoiceSearch}
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
       empty={{
         title: "No invoices yet",
@@ -331,6 +334,19 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
       }}
     />
   );
+}
+
+// Joins the fields a worker can type to find one invoice.
+function invoiceSearch(row: InvoiceRow) {
+  return [
+    row.jobSiteName,
+    formatMonth(row.invoiceMonth),
+    row.invoiceMonth,
+    row.files.map((file) => file.fileName).join(" "),
+    row.amount === null ? "" : String(row.amount),
+    statusLabel(row.status),
+    row.rejectionReason ?? "",
+  ].join(" ");
 }
 
 // Returns the plain status label for an invoice.
@@ -342,6 +358,6 @@ function statusLabel(status: InvoiceStatus) {
 }
 
 // Shows the invoice page for the signed-in worker.
-export function WorkerInvoicesPage() {
-  return <WorkerInvoicesPanel />;
+export function WorkerInvoicesPage({ query = "" }: { query?: string }) {
+  return <WorkerInvoicesPanel query={query} />;
 }

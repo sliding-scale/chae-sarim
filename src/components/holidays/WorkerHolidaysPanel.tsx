@@ -42,7 +42,7 @@ function errorText(error: unknown, fallback: string) {
 }
 
 // Lets a worker request time off for one job site in their company.
-export function WorkerHolidaysPanel() {
+export function WorkerHolidaysPanel({ query = "" }: { query?: string }) {
   const workspace = useWorkspace();
   const company = workspace.tenantName ?? "your company";
   const sites = useQuery(api.jobSites.queries.listWorkerJobSites);
@@ -187,7 +187,7 @@ export function WorkerHolidaysPanel() {
         {holidays === undefined ? (
           <p className="invite-note">Loading holidays…</p>
         ) : (
-          <HolidayTable rows={holidays} />
+          <HolidayTable rows={holidays} query={query} />
         )}
       </section>
     </>
@@ -197,7 +197,7 @@ export function WorkerHolidaysPanel() {
 const workerHolidayColumns = createColumnHelper<DataTableFeatures, HolidayRow>();
 
 // Renders the worker's holiday requests.
-function HolidayTable({ rows }: { rows: HolidayRow[] }) {
+function HolidayTable({ rows, query }: { rows: HolidayRow[]; query: string }) {
   const columns = useMemo(
     () =>
       workerHolidayColumns.columns([
@@ -246,9 +246,12 @@ function HolidayTable({ rows }: { rows: HolidayRow[] }) {
 
   return (
     <AppDataTable
+      key={query}
       columns={columns}
       data={rows}
       searchPlaceholder="Search by job site or reason…"
+      initialSearch={query}
+      rowSearch={holidaySearch}
       filters={[{ id: "status", label: "Status", value: (row) => statusLabel(row.status) }]}
       empty={{
         title: "No holidays yet",
@@ -256,6 +259,18 @@ function HolidayTable({ rows }: { rows: HolidayRow[] }) {
       }}
     />
   );
+}
+
+// Joins the fields a worker can type to find one holiday request.
+function holidaySearch(row: HolidayRow) {
+  return [
+    row.jobSiteName,
+    formatDateRange(row.startDate, row.endDate),
+    row.startDate,
+    row.reason,
+    statusLabel(row.status),
+    row.rejectionReason ?? "",
+  ].join(" ");
 }
 
 // Returns the plain status label for a holiday request.
@@ -267,6 +282,6 @@ function statusLabel(status: HolidayStatus) {
 }
 
 // Shows the holiday request page for the signed-in worker.
-export function WorkerHolidaysPage() {
-  return <WorkerHolidaysPanel />;
+export function WorkerHolidaysPage({ query = "" }: { query?: string }) {
+  return <WorkerHolidaysPanel query={query} />;
 }

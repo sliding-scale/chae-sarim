@@ -1,7 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
+
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 const publicPaths = new Set(["/", "/documentation", "/privacy", "/terms"]);
 
@@ -9,7 +11,7 @@ const publicPaths = new Set(["/", "/documentation", "/privacy", "/terms"]);
 export function ThemeSync() {
   const pathname = usePathname();
 
-  useEffect(() => {
+  useIsoLayoutEffect(() => {
     if (publicPaths.has(pathname)) {
       delete document.documentElement.dataset.theme;
       return;

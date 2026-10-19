@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Doc } from "../_generated/dataModel";
 import { query } from "../_generated/server";
 import {
   daysInsideMonth,
@@ -428,7 +429,36 @@ const activityStatus = v.union(
   v.literal("pending"),
   v.literal("approved"),
   v.literal("rejected"),
+);
+
+const timesheetActivity = v.union(
   v.null(),
+  v.object({
+    status: activityStatus,
+    weekStart: v.string(),
+    weekEnd: v.string(),
+    jobSiteName: v.string(),
+  }),
+);
+
+const invoiceActivity = v.union(
+  v.null(),
+  v.object({
+    status: activityStatus,
+    invoiceMonth: v.string(),
+    jobSiteName: v.string(),
+    fileName: v.union(v.string(), v.null()),
+  }),
+);
+
+const holidayActivity = v.union(
+  v.null(),
+  v.object({
+    status: activityStatus,
+    startDate: v.string(),
+    endDate: v.string(),
+    jobSiteName: v.string(),
+  }),
 );
 
 // Summarises the signed-in worker's month, sites, and latest submissions.
@@ -447,9 +477,9 @@ export const getWorkerHome = query({
     hoursLogged: v.number(),
     invoicesSubmitted: v.number(),
     holidayDays: v.number(),
-    timesheetStatus: activityStatus,
-    invoiceStatus: activityStatus,
-    holidayStatus: activityStatus,
+    timesheet: timesheetActivity,
+    invoice: invoiceActivity,
+    holiday: holidayActivity,
   }),
   handler: async (ctx, args) => {
     const membership = await requireWorker(ctx);
@@ -476,10 +506,10 @@ export const getWorkerHome = query({
       .order("desc")
       .take(homeLimit);
     let hoursLogged = 0;
-    let timesheetStatus: "draft" | "pending" | "approved" | "rejected" | null = null;
+    let latestTimesheet: Doc<"timesheets"> | null = null;
     for (const timesheet of timesheets) {
       if (timesheet.tenantId !== tenantId) continue;
-      if (timesheetStatus === null) timesheetStatus = timesheet.status;
+      if (!latestTimesheet || timesheet.updatedAt >= latestTimesheet.updatedAt) latestTimesheet = timesheet;
       if (timesheet.status !== "rejected") {
         hoursLogged += hoursInMonth(timesheet.hours, timesheet.weekStart, window.month);
       }
@@ -491,10 +521,10 @@ export const getWorkerHome = query({
       .order("desc")
       .take(homeLimit);
     let invoicesSubmitted = 0;
-    let invoiceStatus: "draft" | "pending" | "approved" | "rejected" | null = null;
+    let latestInvoice: Doc<"workerInvoices"> | null = null;
     for (const invoice of invoices) {
       if (invoice.tenantId !== tenantId) continue;
-      if (invoiceStatus === null) invoiceStatus = invoice.status;
+      if (!latestInvoice || invoice.updatedAt >= latestInvoice.updatedAt) latestInvoice = invoice;
       if (invoice.invoiceMonth === window.month && invoice.status !== "draft" && invoice.status !== "rejected") {
         invoicesSubmitted += 1;
       }
@@ -506,10 +536,10 @@ export const getWorkerHome = query({
       .order("desc")
       .take(homeLimit);
     let holidayDays = 0;
-    let holidayStatus: "draft" | "pending" | "approved" | "rejected" | null = null;
+    let latestHoliday: Doc<"holidayRequests"> | null = null;
     for (const holiday of holidays) {
       if (holiday.tenantId !== tenantId) continue;
-      if (holidayStatus === null) holidayStatus = holiday.status;
+      if (!latestHoliday || holiday.updatedAt >= latestHoliday.updatedAt) latestHoliday = holiday;
       if (holiday.status === "approved") {
         holidayDays += daysInsideMonth(holiday.startDate, holiday.endDate, window.monthStart, window.monthEnd);
       }
@@ -520,9 +550,30 @@ export const getWorkerHome = query({
       hoursLogged,
       invoicesSubmitted,
       holidayDays,
-      timesheetStatus,
-      invoiceStatus,
-      holidayStatus,
+      timesheet: latestTimesheet
+        ? {
+            status: latestTimesheet.status,
+            weekStart: latestTimesheet.weekStart,
+            weekEnd: latestTimesheet.weekEnd,
+            jobSiteName: await jobSiteLabel(ctx, tenantId, latestTimesheet.jobSiteId),
+          }
+        : null,
+      invoice: latestInvoice
+        ? {
+            status: latestInvoice.status,
+            invoiceMonth: latestInvoice.invoiceMonth,
+            jobSiteName: await jobSiteLabel(ctx, tenantId, latestInvoice.jobSiteId),
+            fileName: latestInvoice.fileName?.trim() || latestInvoice.invoiceFiles?.[0]?.fileName?.trim() || null,
+          }
+        : null,
+      holiday: latestHoliday
+        ? {
+            status: latestHoliday.status,
+            startDate: latestHoliday.startDate,
+            endDate: latestHoliday.endDate,
+            jobSiteName: await jobSiteLabel(ctx, tenantId, latestHoliday.jobSiteId),
+          }
+        : null,
     };
   },
 });

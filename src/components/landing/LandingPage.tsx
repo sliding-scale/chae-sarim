@@ -2,12 +2,25 @@
 
 import { AuthLink } from "@/components/auth/AuthLink";
 import { ChaeMark } from "@/components/brand/ChaeMark";
+import { UserAvatar } from "@/components/users/UserAvatar";
 import { MarketingFooter } from "@/components/layout/MarketingFooter";
 import { MarketingNavbar } from "@/components/layout/MarketingNavbar";
-import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@clerk/nextjs";
-import { Building2, CalendarOff, ClipboardList, FileText, MapPin } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Building2,
+  CalendarOff,
+  ChevronRight,
+  ChevronUp,
+  ClipboardList,
+  FileText,
+  LayoutDashboard,
+  MapPin,
+  MoonIcon,
+  SunIcon,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 
 const features = [
@@ -116,83 +129,171 @@ export function LandingPage() {
                     <div className="sidebar-nav">
                       <div>
                         <p className="sidebar-section-label">Company</p>
-                        <div className="sidebar-link sidebar-link-active">Overview</div>
-                        <div className="sidebar-link">Workers</div>
-                        <div className="sidebar-link">Job sites</div>
+                        <div className="sidebar-link sidebar-link-active">
+                          <LayoutDashboard size={16} aria-hidden="true" />
+                          <span>Overview</span>
+                        </div>
+                        <div className="sidebar-link">
+                          <Users size={16} aria-hidden="true" />
+                          <span>Workers</span>
+                        </div>
+                        <div className="sidebar-link">
+                          <MapPin size={16} aria-hidden="true" />
+                          <span>Job sites</span>
+                        </div>
                       </div>
                       <div>
                         <p className="sidebar-section-label">Review</p>
-                        <div className="sidebar-link">Timesheets</div>
-                        <div className="sidebar-link">Invoices</div>
-                        <div className="sidebar-link">Holidays</div>
+                        <div className="sidebar-link">
+                          <ClipboardList size={16} aria-hidden="true" />
+                          <span>Timesheets</span>
+                        </div>
+                        <div className="sidebar-link">
+                          <FileText size={16} aria-hidden="true" />
+                          <span>Invoices</span>
+                        </div>
+                        <div className="sidebar-link">
+                          <CalendarOff size={16} aria-hidden="true" />
+                          <span>Holidays</span>
+                        </div>
                       </div>
                     </div>
                     <div className="sidebar-footer">
+                      <div className="sidebar-theme">
+                        <div className="theme-switch">
+                          <span className="theme-switch-control" />
+                          <span className="theme-switch-icon theme-switch-icon-sun">
+                            <SunIcon size={16} className="theme-switch-sun" />
+                          </span>
+                          <span className="theme-switch-icon theme-switch-icon-moon">
+                            <MoonIcon size={16} className="theme-switch-moon" />
+                          </span>
+                          <span data-slot="switch-thumb" />
+                        </div>
+                      </div>
                       <span className="sidebar-account-button">
-                        <span className="avatar is-tone-1" aria-hidden="true">AR</span>
+                        <UserAvatar name="Amina Rahman" />
                         <span className="sidebar-footer-copy">
                           <strong>Amina Rahman</strong>
                           <span>Administrator</span>
                         </span>
+                        <ChevronUp className="sidebar-footer-chevron" size={16} aria-hidden="true" />
                       </span>
                     </div>
                   </aside>
                   <div className="dashboard-main">
-                    <div className="dashboard-topbar">
-                      <strong className="dashboard-title">Overview</strong>
-                      <Badge tone="primary">Administrator</Badge>
-                    </div>
                     <div className="dashboard-content">
-                      <section className="home-stats">
-                        <article className="home-stat is-green">
-                          <span className="home-bubble"><MapPin aria-hidden="true" /></span>
-                          <p>Job sites</p>
-                          <strong>6</strong>
-                          <small>Places your team works</small>
-                        </article>
-                        <article className="home-stat is-green">
-                          <span className="home-bubble"><ClipboardList aria-hidden="true" /></span>
-                          <p>Pending timesheets</p>
-                          <strong>4</strong>
-                          <small>Waiting for review</small>
-                        </article>
-                        <article className="home-stat is-green">
-                          <span className="home-bubble"><FileText aria-hidden="true" /></span>
-                          <p>Pending invoices</p>
-                          <strong>3</strong>
-                          <small>Waiting for review</small>
-                        </article>
-                        <article className="home-stat is-green">
-                          <span className="home-bubble"><CalendarOff aria-hidden="true" /></span>
-                          <p>Pending holidays</p>
-                          <strong>2</strong>
-                          <small>Waiting for review</small>
-                        </article>
-                      </section>
-                      <div className="stack">
-                        <section className="saas-card feed-card">
-                          <header className="feed-card-heading">
-                            <h2 className="panel-title">Recent activity</h2>
-                            <p>Latest updates from your team</p>
-                          </header>
-                          <ActivityFeed
-                            items={[
-                              {
-                                id: "1",
-                                actor: "Maya Chen",
-                                action: "submitted a timesheet",
-                                meta: "North warehouse · 37.5h",
-                                time: "2 min ago",
-                              },
-                              {
-                                id: "2",
-                                actor: "James Okonkwo",
-                                action: "uploaded an invoice",
-                                meta: "March · PKR 1,240.00",
-                                time: "8 min ago",
-                              },
-                            ]}
-                          />
+                      <div className="home-admin">
+                        <header className="home-greeting">
+                          <h1>
+                            Good morning, Amina! <span className="home-wave">👋</span>
+                          </h1>
+                          <p>Here&apos;s what&apos;s happening across your team.</p>
+                        </header>
+                        <section className="home-stats">
+                          <article className="home-stat is-green">
+                            <span className="home-bubble"><MapPin aria-hidden="true" /></span>
+                            <p>Total job sites</p>
+                            <strong>6</strong>
+                            <a tabIndex={-1} href="/dashboard/admin/job-sites">
+                              View job sites <ArrowRight aria-hidden="true" />
+                            </a>
+                          </article>
+                          <article className="home-stat is-green">
+                            <span className="home-bubble"><ClipboardList aria-hidden="true" /></span>
+                            <p>Pending timesheets</p>
+                            <strong>4</strong>
+                            <a tabIndex={-1} href="/dashboard/admin/timesheets">
+                              View timesheets <ArrowRight aria-hidden="true" />
+                            </a>
+                          </article>
+                          <article className="home-stat is-amber">
+                            <span className="home-bubble"><FileText aria-hidden="true" /></span>
+                            <p>Pending invoices</p>
+                            <strong>3</strong>
+                            <a tabIndex={-1} href="/dashboard/admin/invoices">
+                              View invoices <ArrowRight aria-hidden="true" />
+                            </a>
+                          </article>
+                          <article className="home-stat is-green">
+                            <span className="home-bubble"><CalendarOff aria-hidden="true" /></span>
+                            <p>Pending holidays</p>
+                            <strong>2</strong>
+                            <a tabIndex={-1} href="/dashboard/admin/holidays">
+                              View holidays <ArrowRight aria-hidden="true" />
+                            </a>
+                          </article>
+                        </section>
+                        <section className="home-panels">
+                          <article className="home-panel">
+                            <header className="home-panel-header">
+                              <div className="home-heading-group">
+                                <span className="home-round">
+                                  <Users aria-hidden="true" />
+                                </span>
+                                <div>
+                                  <h2>Your team</h2>
+                                  <p>Quick overview of your team members and their assigned job sites.</p>
+                                </div>
+                              </div>
+                              <a className="home-view-all" tabIndex={-1} href="/dashboard/admin/workers">
+                                View all <ArrowRight aria-hidden="true" />
+                              </a>
+                            </header>
+                            <div className="home-members">
+                              {[
+                                ["Maya Chen", "North warehouse"],
+                                ["James Okonkwo", "Riverside depot"],
+                                ["Priya Shah", "City clinic"],
+                              ].map(([name, sites]) => (
+                                <a key={name} className="home-member" tabIndex={-1} href="/dashboard/admin/workers">
+                                  <UserAvatar name={name} />
+                                  <span className="home-member-copy">
+                                    <strong>{name}</strong>
+                                    <span>{sites}</span>
+                                  </span>
+                                  <ChevronRight aria-hidden="true" />
+                                </a>
+                              ))}
+                            </div>
+                            <a className="home-more" tabIndex={-1} href="/dashboard/admin/workers">
+                              <span>
+                                <Users aria-hidden="true" />
+                                2 more team members
+                              </span>
+                              <ChevronRight aria-hidden="true" />
+                            </a>
+                          </article>
+                          <article className="home-panel">
+                            <header className="home-panel-header">
+                              <div className="home-heading-group">
+                                <span className="home-round">
+                                  <BarChart3 aria-hidden="true" />
+                                </span>
+                                <div>
+                                  <h2>This week</h2>
+                                  <p>Approved this week</p>
+                                </div>
+                              </div>
+                            </header>
+                            <div className="home-weekly">
+                              <a className="home-week" tabIndex={-1} href="/dashboard/admin/invoices?status=approved">
+                                <span><FileText aria-hidden="true" /></span>
+                                <p>Invoices approved</p>
+                                <strong>5</strong>
+                              </a>
+                              <a className="home-week" tabIndex={-1} href="/dashboard/admin/timesheets?status=approved">
+                                <span><ClipboardList aria-hidden="true" /></span>
+                                <p>Timesheets approved</p>
+                                <strong>8</strong>
+                              </a>
+                              <a className="home-week" tabIndex={-1} href="/dashboard/admin/holidays?status=approved">
+                                <span><CalendarOff aria-hidden="true" /></span>
+                                <p>Holidays approved</p>
+                                <strong>1</strong>
+                              </a>
+                            </div>
+                          </article>
                         </section>
                       </div>
                     </div>
@@ -229,11 +330,11 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section id="security">
+        <section id="how-it-works">
           <div className="container-saas">
             <div className="security-band">
-              <p className="eyebrow">Two roles</p>
-              <h2>Administrators review. Workers submit their own.</h2>
+              <p className="eyebrow">How it works</p>
+              <h2>Sites are assigned. Records wait for review.</h2>
               <div className="security-grid">
                 {roles.map((item) => {
                   const Icon = item.icon;
@@ -252,7 +353,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="section" id="pricing">
+        <section className="section" id="roles">
           <div className="container-saas">
             <div className="section-heading">
               <p className="eyebrow">Roles</p>
@@ -263,17 +364,14 @@ export function LandingPage() {
             </div>
             <div className="pricing-grid">
               <article className="saas-card pricing-card">
-                <p className="eyebrow">No charge</p>
                 <h3>Administrator</h3>
                 <p>Add job sites, invite workers, and approve timesheets, invoices, and holidays.</p>
               </article>
               <article className="saas-card pricing-card">
-                <p className="eyebrow">No charge</p>
                 <h3>Worker</h3>
                 <p>Submit hours, upload invoices, and request a holiday for assigned job sites.</p>
               </article>
               <article className="saas-card pricing-card">
-                <p className="eyebrow">No charge</p>
                 <h3>Same company</h3>
                 <p>Everyone in the account shares one company. There is no extra permission tier.</p>
               </article>

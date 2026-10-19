@@ -6,6 +6,12 @@ export const metadata = { title: "Timesheets" };
 export const instant = false;
 
 // Shows the timesheet page for the signed-in worker.
-export default function Page() {
-  return <WorkerTimesheetsPage />;
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string | string[] }>;
+}) {
+  const { q } = await searchParams;
+  const query = Array.isArray(q) ? (q[0] ?? "") : (q ?? "");
+  return <WorkerTimesheetsPage query={query} />;
 }
