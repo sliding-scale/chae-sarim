@@ -207,7 +207,7 @@ export function LandingPage() {
                               View timesheets <ArrowRight aria-hidden="true" />
                             </a>
                           </article>
-                          <article className="home-stat is-amber">
+                          <article className="home-stat is-green">
                             <span className="home-bubble"><FileText aria-hidden="true" /></span>
                             <p>Pending invoices</p>
                             <strong>3</strong>

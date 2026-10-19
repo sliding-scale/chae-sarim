@@ -48,7 +48,7 @@ export function AdminDashboardPage() {
           link="View timesheets"
         />
         <HomeStat
-          tone="amber"
+          tone="green"
           icon={FileText}
           label="Pending invoices"
           value={home ? String(home.pendingInvoices) : "—"}

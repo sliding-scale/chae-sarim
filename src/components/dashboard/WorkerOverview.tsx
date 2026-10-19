@@ -70,7 +70,7 @@ export function WorkerDashboardPage() {
           <p>Upload an invoice</p>
           <small>Add your invoice for review</small>
         </Link>
-        <Link className="home-stat is-amber" href="/dashboard/worker/holidays">
+        <Link className="home-stat is-green" href="/dashboard/worker/holidays">
           <span className="home-bubble">
             <CalendarOff aria-hidden="true" />
           </span>
